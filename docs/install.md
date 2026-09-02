@@ -33,31 +33,66 @@ Il ne réclame que deux choses :
 | `SHA256SUMS` | empreintes des 4 binaires |
 
 Chaque tag pousse ces fichiers dans une **Release GitHub** (voir [ci.md](ci.md#build--release-sur-tag)).
+Aucune release n'est publiée à ce jour : jusqu'au premier `git push --tags`, la
+seule installation possible est **depuis les sources**, plus bas.
 
 ### Télécharger et installer
 
-```bash
-# 1. binaire (adapter la cible et le tag)
-curl -fL -o ~/bin/todo-activity-report \
-  "https://github.com/LucasLaurens/todo-activity-report/releases/download/v1.0.0/todo-activity-report-darwin-arm64"
-chmod +x ~/bin/todo-activity-report
+Le dépôt est **privé** : le téléchargement demande une authentification GitHub.
+Le plus simple est `gh`, qui réutilise la session existante — inutile de
+manipuler un token à la main :
 
-# 2. identifiants, à côté du binaire (auto-chargés, aucun export nécessaire)
+```bash
+TAG=v1.0.0                    # tag visé
+TARGET=darwin-arm64           # ou darwin-amd64, linux-amd64, linux-arm64
+
+# 1. binaire + empreintes, sous leur nom de publication
+gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
+  --pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS
+
+# 2. vérifier AVANT de renommer (voir plus bas)
+shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS
+sha256sum -c SHA256SUMS --ignore-missing       # Linux
+
+# 3. installer
+install -m 755 "todo-activity-report-$TARGET" ~/bin/todo-activity-report
+
+# 4. identifiants, à côté du binaire (auto-chargés, aucun export nécessaire)
 printf 'TRACKER_PROJECT=ACME\nJIRA_BASE_URL=https://your-org.atlassian.net\nJIRA_EMAIL=…\nJIRA_API_TOKEN=…\n' > ~/bin/.env
 chmod 600 ~/bin/.env
 
-# 3. utiliser
+# 5. utiliser
 ~/bin/todo-activity-report --date="$(date +%d/%m/%Y)" --user='john.doe@example.com'
 ```
 
 Installation minimale = **2 fichiers** : le binaire (~6 Mo) et le `.env`.
 
+Depuis un navigateur, la page des Releases fait la même chose en un clic — la
+session GitHub suffit.
+
+> Sur un dépôt privé, l'URL directe
+> `https://github.com/<org>/<dépôt>/releases/download/<tag>/<nom>` répond **404**
+> sans authentification. C'est une vraie erreur : `curl -f` s'arrête et
+> n'écrit rien. Le risque n'est donc pas un faux fichier, c'est une commande qui
+> ne marche pas — d'où `gh release download`, qui porte la session.
+
 ### Vérifier l'empreinte (recommandé)
 
+`SHA256SUMS` référence les fichiers sous leur **nom de publication**
+(`todo-activity-report-darwin-arm64`). La vérification doit donc précéder le
+renommage — c'est pourquoi l'étape 3 ci-dessus installe *après* l'étape 2 :
+
 ```bash
-curl -fLO "https://github.com/LucasLaurens/todo-activity-report/releases/download/v1.0.0/SHA256SUMS"
-shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS
-sha256sum -c SHA256SUMS --ignore-missing       # Linux
+$ shasum -a 256 -c SHA256SUMS --ignore-missing
+todo-activity-report-darwin-arm64: OK
+```
+
+Renommer d'abord le binaire en `todo-activity-report` fait échouer la
+vérification sans qu'aucune empreinte soit comparée :
+
+```bash
+$ shasum -a 256 -c SHA256SUMS --ignore-missing
+shasum: SHA256SUMS: no file was verified          # exit 1
 ```
 
 ### Savoir quelle version on a
@@ -126,9 +161,13 @@ Ajouter `-X main.version=<tag>` pour que `--version` annonce autre chose que `de
 Remplacer le binaire, le `.env` reste en place :
 
 ```bash
-curl -fL -o ~/bin/todo-activity-report \
-  "https://github.com/LucasLaurens/todo-activity-report/releases/download/v1.1.0/todo-activity-report-darwin-arm64"
-chmod +x ~/bin/todo-activity-report
+TAG=v1.1.0                    # tag visé
+TARGET=darwin-arm64
+gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
+  --pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing
+install -m 755 "todo-activity-report-$TARGET" ~/bin/todo-activity-report
+~/bin/todo-activity-report --version          # confirme le tag installé
 ```
 
 ## Désinstaller

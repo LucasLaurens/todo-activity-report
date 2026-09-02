@@ -77,7 +77,11 @@ Aucune dépendance Go tierce : stdlib uniquement.
 - [ ] Un seul adapter de tracker livré (`jira`) : le port et le registre existent, les autres restent à écrire.
 - [ ] Pas de cache des réponses du tracker (chaque run rappelle l'API).
 - [ ] Sortie terminal uniquement (pas de JSON/CSV export).
-- [ ] Pas de Homebrew tap / installeur : le binaire se télécharge à la main (`curl`) depuis la Release.
+- [ ] Pas de Homebrew tap / installeur : le binaire se télécharge à la main depuis la Release.
+  Le dépôt étant privé, le téléchargement passe par `gh release download`, qui porte la
+  session GitHub ; l'URL directe répond 404 sans authentification — voir [install.md](install.md).
+- [ ] Aucune release publiée à ce jour : jusqu'au premier tag poussé, l'installation binaire
+  décrite dans [install.md](install.md) n'a rien à télécharger.
 
 ## Modèle IA par défaut
 

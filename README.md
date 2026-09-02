@@ -99,6 +99,64 @@ Avec l'adapter Jira, `JIRA_BASE_URL`, `JIRA_EMAIL` et `JIRA_API_TOKEN` sont
 requis — voir [docs/jira-setup.md](docs/jira-setup.md). Langue via `APP_LOCALE`
 (`fr` défaut, `en`).
 
+## Tokens et secrets
+
+Tout part de `.env`, copié depuis [`.env.example`](.env.example) :
+
+```bash
+cp .env.example .env
+```
+
+`.env` est ignoré par git. Aucun `export` n'est nécessaire : le binaire le
+charge seul, depuis le répertoire courant **puis** depuis son propre dossier.
+
+### Requis par le CLI
+
+| Variable | Où l'obtenir |
+|----------|--------------|
+| `TRACKER` | nom de l'adapter, `jira` par défaut. Ce n'est pas un secret |
+| `TRACKER_PROJECT` | la clé du board, telle qu'elle apparaît dans les clés de ticket (`ACME-1042` → `ACME`) |
+| `JIRA_BASE_URL` | l'URL de ton site Atlassian, sans chemin — `https://your-org.atlassian.net`. **HTTPS obligatoire**, le CLI refuse le HTTP |
+| `JIRA_EMAIL` | l'adresse du compte Atlassian, celle qui a généré le token |
+| `JIRA_API_TOKEN` | https://id.atlassian.com/manage-profile/security/api-tokens → *Create API token* → copie la valeur, elle n'est affichée qu'**une seule fois** |
+
+Le token porte tes propres droits : il voit ce que tu vois, rien de plus. Détail
+des permissions et des champs custom dans [docs/jira-setup.md](docs/jira-setup.md).
+Un autre tracker apporte ses propres variables — voir [docs/trackers.md](docs/trackers.md).
+
+### Optionnels
+
+| Variable | Où l'obtenir | Quand la remplir |
+|----------|--------------|------------------|
+| `ANTHROPIC_API_KEY` | https://console.anthropic.com → *API keys* → *Create key* | Uniquement si le CLI `claude` n'est pas installé. Sinon **laisse vide** : le CLI local réutilise ta session, sans clé |
+| `ANTHROPIC_MODEL` | — | Pour forcer un modèle. Ce n'est pas un secret |
+| `JIRA_ROOT_CAUSE_FIELD` | Jira → *Paramètres* → *Tickets* → *Champs personnalisés*, relève l'id `customfield_XXXXX` | Champ portant la note de cause racine. Ce n'est pas un secret, juste un identifiant |
+| `JIRA_CORRECTION_FIELD` | idem | Seulement si un champ distinct porte le correctif. Vide, la Correction est extraite du même champ que la Cause |
+| `APP_LOCALE` | — | `fr` (défaut) ou `en`. Ce n'est pas un secret |
+
+### Autour du dépôt, pas dans `.env`
+
+Le dépôt est privé, donc cloner et télécharger une Release demandent une
+authentification GitHub. Elle est déléguée à `gh` (`gh auth login`), qui garde le
+jeton dans le trousseau du système : **aucun token à écrire dans un fichier**, et
+le CLI n'en lit jamais. Le `git push` en SSH n'en a pas besoin non plus.
+
+### Sentry
+
+Le projet n'utilise pas Sentry. Aucune variable `SENTRY_*` n'est lue nulle part
+dans le code — ne pas en ajouter à `.env` : elle serait morte.
+
+### Hygiène
+
+- `.env` ne doit jamais être commité ni affiché. Pour le lire dans un script,
+  le sourcer dans un sous-shell (`set -a; . .env; set +a`), jamais `cat`.
+- La CI n'a besoin d'aucun secret : elle compile, teste et publie avec le
+  `GITHUB_TOKEN` fourni par la plateforme.
+- Un token exposé se révoque, il ne se répare pas : supprime-le côté émetteur
+  (Atlassian, Anthropic, GitHub) puis régénère-en un neuf.
+- Le résumé IA envoie les titres, causes et commentaires des tickets à Claude —
+  voir [confidentialité](docs/configuration.md#confidentialité-du-résumé-ia).
+
 ## Documentation
 
 | Doc | Contenu |

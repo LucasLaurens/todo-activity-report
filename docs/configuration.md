@@ -59,6 +59,9 @@ typée. Changer un nom de variable = un seul fichier à toucher.
 adapter lit ses propres variables et ignore celles-ci.
 | `ANTHROPIC_API_KEY` | non | — | **fallback** API si le CLI `claude` est absent |
 | `ANTHROPIC_MODEL` | non | `claude-sonnet-4-6` | modèle Claude utilisé par le fallback API |
+
+Où générer chaque token, et ceux utilisés autour du dépôt sans passer par
+`.env` : [README, section Tokens et secrets](../README.md#tokens-et-secrets).
 | `NO_COLOR` | non | — | si défini (non vide), désactive la colorimétrie ANSI des statuts |
 
 `NO_COLOR` et `COLUMNS` décrivent le terminal, pas l'app : ils sont lus directement
