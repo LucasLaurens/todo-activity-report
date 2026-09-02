@@ -1,0 +1,14 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet        # analyseur officiel
+    - staticcheck  # analyse statique (inclut gosimple en v2)
+    - ineffassign  # affectations inutiles
+    - unused       # code mort
+    - unconvert    # conversions redondantes
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

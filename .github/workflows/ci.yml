@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+env:
+  GO_VERSION: '1.22'
+  BINARY: todo-activity-report
+
+jobs:
+  # The four gates run in parallel: a red one blocks the release jobs below.
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        check: [format, vet, lint, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: gofmt
+        if: matrix.check == 'format'
+        run: test -z "$(gofmt -l .)" || { echo "gofmt needed — run 'gofmt -w .':"; gofmt -l .; exit 1; }
+
+      - name: go vet
+        if: matrix.check == 'vet'
+        run: go vet ./...
+
+      - name: golangci-lint
+        if: matrix.check == 'lint'
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v2.1.0
+
+      - name: go test
+        if: matrix.check == 'test'
+        run: |
+          go test -race -coverpkg=./... -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out | tail -1
+
+  # One job for the four targets: pure Go (stdlib, no cgo), so cross-compiling
+  # needs no C toolchain.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build every target
+        run: |
+          mkdir -p dist
+          for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
+            GOOS="${target%-*}" GOARCH="${target#*-}" \
+              go build -trimpath -ldflags="-s -w -X main.version=${GITHUB_REF_NAME}" \
+                -o "dist/${BINARY}-${target}" ./cmd/${BINARY}
+          done
+          cd dist && sha256sum ${BINARY}-* > SHA256SUMS && cat SHA256SUMS
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          body: "${{ env.BINARY }} ${{ github.ref_name }} — binaires autonomes (stdlib, statiquement liés)."
