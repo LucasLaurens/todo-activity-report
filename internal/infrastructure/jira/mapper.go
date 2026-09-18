@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const jiraTimeLayout = "2006-01-02T15:04:05.999-0700"
@@ -38,13 +39,15 @@ func toTask(dto issueDTO, mapping fieldMapping) (domain.Task, error) {
 		correction = separate
 	}
 
+	// Every string below is tracker-controlled text about to be printed on a
+	// terminal: sanitize on ingress so no escape sequence ever reaches it.
 	return domain.Task{
-		Key:        dto.Key,
-		Summary:    fields.Summary,
-		Assignee:   assigneeName(fields.Assignee),
-		Type:       fields.IssueType.Name,
-		Priority:   priorityName(fields.Priority),
-		Status:     fields.Status.Name,
+		Key:        sanitize.Printable(dto.Key),
+		Summary:    sanitize.Printable(fields.Summary),
+		Assignee:   sanitize.Printable(assigneeName(fields.Assignee)),
+		Type:       sanitize.Printable(fields.IssueType.Name),
+		Priority:   sanitize.Printable(priorityName(fields.Priority)),
+		Status:     sanitize.Printable(fields.Status.Name),
 		RootCause:  rootCause,
 		Correction: correction,
 		CreatedAt:  parseTime(fields.Created),
@@ -71,11 +74,11 @@ func toComments(field *commentField) []domain.Comment {
 	}
 	comments := make([]domain.Comment, 0, len(recent))
 	for _, entry := range recent {
-		body := strings.TrimSpace(flattenValue(entry.Body))
+		body := strings.TrimSpace(sanitize.Printable(flattenValue(entry.Body)))
 		if body == "" {
 			continue
 		}
-		comments = append(comments, domain.Comment{Author: assigneeName(entry.Author), Body: body})
+		comments = append(comments, domain.Comment{Author: sanitize.Printable(assigneeName(entry.Author)), Body: body})
 	}
 	return comments
 }
@@ -133,7 +136,7 @@ func textField(fields map[string]any, key string) string {
 	if !ok || raw == nil {
 		return ""
 	}
-	return flattenValue(raw)
+	return sanitize.Printable(flattenValue(raw))
 }
 
 // flattenValue renders a decoded JSON value as plain text: a string verbatim, an

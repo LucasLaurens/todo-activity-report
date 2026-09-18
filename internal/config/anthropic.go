@@ -1,6 +1,6 @@
 package config
 
-const defaultAnthropicModel = "claude-sonnet-4-6"
+import "github.com/LucasLaurens/todo-activity-report/internal/infrastructure/llm"
 
 // anthropicConfig holds the resolved Anthropic settings. The AI narrative is a
 // pure add-on, so it is enabled only when a key is present.
@@ -14,7 +14,7 @@ type anthropicConfig struct {
 func anthropicConfigFromEnv() anthropicConfig {
 	return anthropicConfig{
 		apiKey: env("ANTHROPIC_API_KEY"),
-		model:  envDefault("ANTHROPIC_MODEL", defaultAnthropicModel),
+		model:  envDefault("ANTHROPIC_MODEL", llm.DefaultModel),
 	}
 }
 

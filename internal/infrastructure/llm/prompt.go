@@ -8,7 +8,14 @@ import (
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
 )
 
-const maxTasksInPrompt = 40
+// maxTasksInPrompt and maxCommentsInPrompt budget the request: the model writes
+// a line per ticket and reads every comment first, so these two numbers drive
+// how long the narrative takes. A day rarely holds twenty worked tickets, and
+// the three most recent comments carry the state of a thread.
+const (
+	maxTasksInPrompt    = 20
+	maxCommentsInPrompt = 3
+)
 
 // maxCommentRunes bounds a single comment in the prompt: enough to carry the
 // gist, capped so a long thread can't blow up the request size (and cost).
@@ -30,6 +37,15 @@ func oneLine(text string) string {
 		return collapsed
 	}
 	return string(runes[:maxCommentRunes-1]) + "…"
+}
+
+// recentComments keeps the tail of the thread — the mapper hands comments over
+// oldest first, and the recent ones say where the ticket stands.
+func recentComments(comments []domain.Comment) []domain.Comment {
+	if len(comments) <= maxCommentsInPrompt {
+		return comments
+	}
+	return comments[len(comments)-maxCommentsInPrompt:]
 }
 
 // buildPrompt turns the report into a compact briefing for the model. The
@@ -55,6 +71,8 @@ func buildPrompt(report domain.Report, t i18n.Translator) string {
 	fmt.Fprintf(&b, "Length budget, and it is hard: %d words maximum per ticket line, one single line each, no sub-bullets, "+
 		"no blank line between them, no preamble, no closing sentence, no markdown, no heading. Be terse: drop filler, keep the fact.\n",
 		maxWordsPerTicketLine)
+	b.WriteString("The ticket list may end with \"... and N more\": those tickets are out of scope, ignore them silently — ")
+	b.WriteString("do not mention them, do not count them, do not close with a sentence about them.\n")
 	b.WriteString("Each ticket may list recent comments. Use them as supporting detail to make the recap precise and accurate — ")
 	b.WriteString("fold the relevant fact into that ticket's line. Do not quote comments verbatim, do not list them, and do not invent ")
 	b.WriteString("anything not present in the data below.\n\n")
@@ -63,7 +81,7 @@ func buildPrompt(report domain.Report, t i18n.Translator) string {
 	fmt.Fprintf(&b, "Project: %s\n", report.Project)
 	fmt.Fprintf(&b, "Period: %s to %s\n", report.Period.FromString(), report.Period.ToString())
 	fmt.Fprintf(&b, "Total tickets: %d (resolved %d)\n", metrics.TotalTasks, metrics.ResolvedTasks)
-	fmt.Fprintf(&b, "Time logged: %s, average %s per ticket\n", metrics.TotalTimeSpent, metrics.AvgTimeSpent)
+	fmt.Fprintf(&b, "Time logged as assignee: %s, average %s per ticket\n", metrics.TotalTimeSpent, metrics.AvgTimeSpent)
 
 	if len(metrics.ByStatus) > 0 {
 		b.WriteString("Status breakdown:\n")
@@ -86,7 +104,7 @@ func buildPrompt(report domain.Report, t i18n.Translator) string {
 		}
 		fmt.Fprintf(&b, "  - [%s] %s | status=%s | assignee=%s | time=%s | root cause=%q | fix=%q\n",
 			task.Key, task.Summary, task.Status, task.Assignee, task.TimeSpent, task.RootCause, task.Correction)
-		for _, comment := range task.Comments {
+		for _, comment := range recentComments(task.Comments) {
 			fmt.Fprintf(&b, "      comment by %s: %s\n", comment.Author, oneLine(comment.Body))
 		}
 	}

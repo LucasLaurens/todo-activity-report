@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,13 +31,27 @@ func dotEnvCandidates() []string {
 	return candidates
 }
 
+// worldWritablePermission is the bit that makes a .env everyone's to rewrite.
+const worldWritablePermission = 0o002
+
 // applyDotEnv parses one file and reports whether it existed and was read.
+// A world-writable .env is skipped: it holds the Jira token and the base URL,
+// so anyone able to rewrite it could redirect the credentials to another host.
 func applyDotEnv(path string) bool {
 	file, err := os.Open(path)
 	if err != nil {
 		return false
 	}
 	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		return false
+	}
+	if info.Mode().Perm()&worldWritablePermission != 0 {
+		fmt.Fprintf(os.Stderr, "warning: ignoring world-writable %s (chmod o-w it to load it)\n", path)
+		return false
+	}
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

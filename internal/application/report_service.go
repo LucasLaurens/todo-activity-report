@@ -54,7 +54,7 @@ func (s ReportService) Generate(ctx context.Context, query domain.Query) (domain
 		Period:    query.Period,
 		Assignees: displayAssignees,
 		Tasks:     tasks,
-		Metrics:   s.calculator.Calculate(tasks),
+		Metrics:   s.calculator.Calculate(tasks, query.Period),
 		Narrative: domain.None[string](),
 	}
 

@@ -3,6 +3,7 @@ package llm
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -10,12 +11,17 @@ import (
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
-	defaultCLIBinary = "claude"
-	cliTimeout       = 120 * time.Second
-	cliOutputFormat  = "text"
+	// DefaultCLIBinary is the local Claude Code executable looked up on PATH.
+	DefaultCLIBinary = "claude"
+	// cliTimeout budgets the whole narrative. A day with forty tickets and their
+	// comments is a long prompt, and the model answers one line per ticket, so
+	// two minutes were not always enough.
+	cliTimeout      = 4 * time.Minute
+	cliOutputFormat = "text"
 )
 
 // ClaudeCLISummarizer drives the local `claude` CLI in headless mode, reusing
@@ -29,7 +35,7 @@ type ClaudeCLISummarizer struct {
 
 func NewClaudeCLISummarizer(binary string, translator i18n.Translator) ClaudeCLISummarizer {
 	if binary == "" {
-		binary = defaultCLIBinary
+		binary = DefaultCLIBinary
 	}
 	return ClaudeCLISummarizer{binary: binary, timeout: cliTimeout, translator: translator}
 }
@@ -48,10 +54,15 @@ func (s ClaudeCLISummarizer) Summarize(ctx context.Context, report domain.Report
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
+		// A killed process reports "signal: killed" with an empty stderr, which
+		// says nothing: name the budget it blew instead.
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return domain.None[string](), fmt.Errorf("claude cli timed out after %s (shorten the period or pass --no-ai)", s.timeout)
+		}
 		return domain.None[string](), fmt.Errorf("claude cli: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 
-	narrative := strings.TrimSpace(stdout.String())
+	narrative := strings.TrimSpace(sanitize.Printable(stdout.String()))
 	if narrative == "" {
 		return domain.None[string](), nil
 	}

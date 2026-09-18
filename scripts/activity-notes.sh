@@ -42,7 +42,7 @@ APPLESCRIPT
 )
 [[ "$exists" == "yes" ]] && exit 0
 
-report=$("$BIN" --date="$target" --user="$USER_FILTER" --brief 2>/dev/null)
+report=$("$BIN" --date="$target" --user="$USER_FILTER" --detail=brief 2>/dev/null)
 [[ -z "$report" ]] && exit 1
 
 # Notes attend du HTML : échapper puis préserver la mise en forme en <pre>.

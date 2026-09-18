@@ -25,6 +25,10 @@ const (
 	minSentenceLength = 40
 )
 
+// breakdownSummaryLength keeps a time-breakdown row on one terminal line: the
+// key, the time and the share already take a third of the width.
+const breakdownSummaryLength = 60
+
 // Renderer writes a Report to a terminal-friendly, locale-aware layout. It
 // depends only on io.Writer, so it is trivially testable against a buffer.
 type Renderer struct {
@@ -44,8 +48,7 @@ type Renderer struct {
 //     and the AI narrative — a numbers-plus-summary digest.
 type RenderOptions struct {
 	TaskLimit int
-	Full      bool
-	Brief     bool
+	Detail    DetailLevel
 }
 
 func NewRenderer(out io.Writer, opts RenderOptions, translator i18n.Translator) Renderer {
@@ -56,6 +59,8 @@ func (r Renderer) Render(report domain.Report) error {
 	sections := []func(domain.Report) error{
 		r.renderHeader,
 		r.renderOverview,
+		r.renderTimeScopeNote,
+		r.renderTimeBreakdown,
 		r.renderDistribution("by_status", report.Metrics.ByStatus, r.paintByStatus),
 		r.renderAssignees,
 		r.renderDistribution("by_type", report.Metrics.ByType, uncolored),
@@ -91,10 +96,73 @@ func (r Renderer) renderOverview(report domain.Report) error {
 	return r.table(func(w io.Writer) {
 		fmt.Fprintf(w, "  %s\t%d\n", r.t.T("total_tasks"), m.TotalTasks)
 		fmt.Fprintf(w, "  %s\t%d (%.0f%%)\n", r.t.T("resolved"), m.ResolvedTasks, m.ResolutionRate()*100)
-		fmt.Fprintf(w, "  %s\t%s\n", r.t.T("time_logged"), m.TotalTimeSpent)
+		fmt.Fprintf(w, "  %s\t%s\n", r.timeLoggedLabel(report), m.TotalTimeSpent)
 		fmt.Fprintf(w, "  %s\t%s\n", r.t.T("avg_per_task"), m.AvgTimeSpent)
 		fmt.Fprintf(w, "  %s\t%s\n", r.t.T("mttr"), r.formatMTTR(m.MTTR))
 	})
+}
+
+// timeLoggedLabel names what the total actually covers. Targeting people filters
+// twice — the tickets assigned to them, then their own worklogs — so the figure
+// is their time *as assignee*, not every minute they logged that day.
+func (r Renderer) timeLoggedLabel(report domain.Report) string {
+	if len(report.Assignees) == 0 {
+		return r.t.T("time_logged")
+	}
+	return r.t.T("time_logged_as_assignee")
+}
+
+// renderTimeScopeNote spells out what the assignee filter leaves out, since a
+// missing worklog is invisible by definition.
+func (r Renderer) renderTimeScopeNote(report domain.Report) error {
+	if len(report.Assignees) == 0 || report.Metrics.TotalTimeSpent.Seconds() == 0 {
+		return nil
+	}
+	return r.renderIndented(r.t.T("time_scope_note"))
+}
+
+// renderTimeBreakdown answers "where did the time go?": every ticket with time
+// logged in the period, longest first, with its share of the total. Tickets
+// touched without logged time are only counted — they carry no share.
+func (r Renderer) renderTimeBreakdown(report domain.Report) error {
+	breakdown := report.Metrics.TimeBreakdown
+	if len(breakdown) == 0 {
+		return nil
+	}
+	if err := r.section("time_breakdown"); err != nil {
+		return err
+	}
+	shown, hidden := window(breakdown, r.opts.TaskLimit)
+	// A row carries no status text, so it is painted from its own ticket's
+	// status: colouring by keywords would read the summary instead.
+	paint := func(row int, line string) string {
+		return r.paintWith(line, kindColors[domain.ClassifyStatus(shown[row].Status)])
+	}
+	if err := r.paintedTable(paint, func(w io.Writer) {
+		for _, entry := range shown {
+			fmt.Fprintf(w, "%s%s\t%s\t%3.0f%%\t%s\n",
+				plainPrefix, entry.Key, entry.TimeSpent, entry.Share*100, r.clip(entry.Summary, breakdownSummaryLength))
+		}
+	}); err != nil {
+		return err
+	}
+	if hidden > 0 {
+		if err := r.printf("%s%s\n", plainPrefix, r.t.T("more_hidden", hidden)); err != nil {
+			return err
+		}
+	}
+	return r.renderUntimedCount(report.Metrics.UntimedTasks)
+}
+
+func (r Renderer) renderUntimedCount(untimed int) error {
+	if untimed == 0 {
+		return nil
+	}
+	key := "untimed_tasks_many"
+	if untimed == 1 {
+		key = "untimed_tasks_one"
+	}
+	return r.printf("%s%s\n", plainPrefix, r.t.T(key, untimed))
 }
 
 func (r Renderer) renderAssignees(report domain.Report) error {
@@ -114,9 +182,9 @@ func (r Renderer) renderAssignees(report domain.Report) error {
 }
 
 // uncolored leaves a distribution line as-is: only statuses carry a color.
-func uncolored(line string) string { return line }
+func uncolored(_ int, line string) string { return line }
 
-func (r Renderer) renderDistribution(titleKey string, counts []domain.LabelCount, paint func(string) string) func(domain.Report) error {
+func (r Renderer) renderDistribution(titleKey string, counts []domain.LabelCount, paint rowPainter) func(domain.Report) error {
 	return func(_ domain.Report) error {
 		if len(counts) == 0 {
 			return nil
@@ -136,7 +204,7 @@ func (r Renderer) renderDistribution(titleKey string, counts []domain.LabelCount
 // indent. Unlike the count distributions it never truncates (the cause text is
 // the point) and drops the trailing count unless a cause repeats.
 func (r Renderer) renderRootCauses(report domain.Report) error {
-	if r.opts.Brief {
+	if r.opts.Detail.IsBrief() {
 		return nil
 	}
 	// Only causes hitting several tickets are worth an aggregate; unique ones are
@@ -162,13 +230,13 @@ func (r Renderer) renderRootCauses(report domain.Report) error {
 }
 
 func (r Renderer) renderTasks(report domain.Report) error {
-	if r.opts.Brief {
+	if r.opts.Detail.IsBrief() {
 		return nil
 	}
 	if len(report.Tasks) == 0 {
 		return r.printf("\n\n%s\n", r.t.T("no_tasks"))
 	}
-	shown, hidden := r.taskWindow(report.Tasks)
+	shown, hidden := window(report.Tasks, r.opts.TaskLimit)
 	if err := r.printf("\n\n%s\n", r.t.T("tasks_header", len(shown), len(report.Tasks))); err != nil {
 		return err
 	}
@@ -262,11 +330,13 @@ func (r Renderer) renderNarrative(report domain.Report) error {
 }
 
 // taskWindow returns the tasks to display and how many are hidden by the limit.
-func (r Renderer) taskWindow(tasks []domain.Task) ([]domain.Task, int) {
-	if r.opts.TaskLimit <= 0 || len(tasks) <= r.opts.TaskLimit {
-		return tasks, 0
+// window caps a list at limit entries and reports how many it left out. One
+// rule for every list in the report: 0 (or less) means no cap.
+func window[T any](items []T, limit int) ([]T, int) {
+	if limit <= 0 || len(items) <= limit {
+		return items, 0
 	}
-	return tasks[:r.opts.TaskLimit], len(tasks) - r.opts.TaskLimit
+	return items[:limit], len(items) - limit
 }
 
 func (r Renderer) section(titleKey string) error {
@@ -282,21 +352,25 @@ func (r Renderer) printf(format string, args ...any) error {
 	return err
 }
 
+// rowPainter colours one already-aligned table row, identified by its index so
+// a painter can look the row's own data up.
+type rowPainter func(row int, line string) string
+
 func (r Renderer) table(write func(io.Writer)) error {
 	return r.paintedTable(uncolored, write)
 }
 
 // paintedTable aligns first, colors after: tabwriter counts escape codes as
 // visible width, so they must be added once the padding is computed.
-func (r Renderer) paintedTable(paint func(string) string, write func(io.Writer)) error {
+func (r Renderer) paintedTable(paint rowPainter, write func(io.Writer)) error {
 	var aligned strings.Builder
 	w := tabwriter.NewWriter(&aligned, 0, 4, 2, ' ', 0)
 	write(w)
 	if err := w.Flush(); err != nil {
 		return err
 	}
-	for _, line := range strings.Split(strings.TrimSuffix(aligned.String(), "\n"), "\n") {
-		if err := r.printf("%s\n", paint(line)); err != nil {
+	for row, line := range strings.Split(strings.TrimSuffix(aligned.String(), "\n"), "\n") {
+		if err := r.printf("%s\n", paint(row, line)); err != nil {
 			return err
 		}
 	}
@@ -364,7 +438,7 @@ func wrapText(text string, width int) []string {
 // clip caps a value by runes (never mid-character on multibyte UTF-8), unless
 // full output is requested — then the value is returned untouched.
 func (r Renderer) clip(value string, max int) string {
-	if r.opts.Full {
+	if r.opts.Detail.IsFull() {
 		return value
 	}
 	runes := []rune(value)
@@ -379,7 +453,7 @@ func (r Renderer) clip(value string, max int) string {
 // word boundary. --full returns the complete text. Keeps the gist, drops the wall.
 func (r Renderer) concise(text string) string {
 	trimmed := strings.TrimSpace(text)
-	if r.opts.Full {
+	if r.opts.Detail.IsFull() {
 		return trimmed
 	}
 	runes := []rune(trimmed)

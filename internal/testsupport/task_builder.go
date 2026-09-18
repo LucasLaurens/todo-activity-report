@@ -71,6 +71,19 @@ func (b *TaskBuilder) WithTimeSpentHours(hours int) *TaskBuilder {
 	return b
 }
 
+// CreatedOn pins the creation date, for tests that assert on the period or on
+// the resolution delay.
+func (b *TaskBuilder) CreatedOn(moment time.Time) *TaskBuilder {
+	b.task.CreatedAt = moment
+	return b
+}
+
+// ResolvedOn pins the resolution date, leaving the creation date untouched.
+func (b *TaskBuilder) ResolvedOn(moment time.Time) *TaskBuilder {
+	b.task.ResolvedAt = domain.Some(moment)
+	return b
+}
+
 func (b *TaskBuilder) ResolvedAfter(d time.Duration) *TaskBuilder {
 	b.task.ResolvedAt = domain.Some(b.task.CreatedAt.Add(d))
 	return b

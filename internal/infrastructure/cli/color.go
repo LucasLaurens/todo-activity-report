@@ -95,20 +95,20 @@ func (r Renderer) paintNarrativeLine(line string, colors map[string]string) stri
 	}
 	color, known := colors[key]
 	if !known {
-		return r.paintByStatus(line)
+		return r.paintByStatus(0, line)
 	}
-	if !r.color || color == "" {
-		return line
-	}
-	return color + line + ansiReset
+	return r.paintWith(line, color)
 }
 
-func (r Renderer) paintByStatus(text string) string {
-	if !r.color {
-		return text
-	}
-	color := statusColor(text)
-	if color == "" {
+// paintByStatus colours a line that contains a status name (the "Avancement"
+// rows, an AI line with no known ticket) by the keywords it carries.
+func (r Renderer) paintByStatus(_ int, text string) string {
+	return r.paintWith(text, statusColor(text))
+}
+
+// paintWith applies an explicit colour, honouring the no-colour output.
+func (r Renderer) paintWith(text, color string) string {
+	if !r.color || color == "" {
 		return text
 	}
 	return color + text + ansiReset

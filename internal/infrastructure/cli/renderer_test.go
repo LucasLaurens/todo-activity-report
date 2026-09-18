@@ -26,7 +26,7 @@ func buildReport(t *testing.T, tasks ...domain.Task) domain.Report {
 		Period:    period,
 		Assignees: []string{"Ada Lovelace"},
 		Tasks:     tasks,
-		Metrics:   application.NewMetricsCalculator().Calculate(tasks),
+		Metrics:   application.NewMetricsCalculator().Calculate(tasks, period),
 		Narrative: domain.None[string](),
 	}
 }
@@ -75,11 +75,12 @@ func TestRenderShowsNarrativeWhenPresent(t *testing.T) {
 
 func TestRenderBriefHidesRootCausesAndTickets(t *testing.T) {
 	t.Parallel()
-	// Arrange — brief keeps the metrics + narrative, drops causes and ticket list.
+	// Arrange — brief keeps the figures (time breakdown included) + narrative,
+	// and drops the recurring causes and the detailed ticket blocks.
 	report := buildReport(t, testsupport.NewTask().WithKey("HT-101").WithRootCause("Expired token").Build())
 	report.Narrative = domain.Some("Synthèse parlée du jour.")
 	var buffer bytes.Buffer
-	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Brief: true}, fr())
+	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Detail: cli.DetailBrief}, fr())
 
 	// Act
 	if err := renderer.Render(report); err != nil {
@@ -93,7 +94,7 @@ func TestRenderBriefHidesRootCausesAndTickets(t *testing.T) {
 			t.Fatalf("expected %q in brief output, got:\n%s", want, output)
 		}
 	}
-	for _, unwanted := range []string{"Causes racines", "Tickets (", "HT-101"} {
+	for _, unwanted := range []string{"Causes racines", "Tickets (", "Cause: Expired token"} {
 		if strings.Contains(output, unwanted) {
 			t.Fatalf("did not expect %q in brief output, got:\n%s", unwanted, output)
 		}
@@ -121,10 +122,13 @@ func TestRenderWrapsLongSummaryWithoutBreakingUTF8(t *testing.T) {
 	if !utf8.ValidString(output) {
 		t.Fatal("output contains invalid UTF-8 — a rune was cut mid-character")
 	}
-	if strings.Contains(output, "…") {
-		t.Fatalf("summaries wrap, they are not truncated, got:\n%s", output)
+	// The ticket block wraps its summary; the time-breakdown table, one row per
+	// ticket, clips it instead — so scope the assertion to the ticket list.
+	tickets := output[strings.Index(output, "Tickets ("):]
+	if strings.Contains(tickets, "…") {
+		t.Fatalf("summaries wrap, they are not truncated, got:\n%s", tickets)
 	}
-	if !strings.Contains(output, "MARQUEUR_FIN") {
+	if !strings.Contains(tickets, "MARQUEUR_FIN") {
 		t.Fatal("expected the full summary (its end marker) to be shown")
 	}
 }
@@ -135,7 +139,7 @@ func TestRenderFullSkipsTruncation(t *testing.T) {
 	rootCause := strings.Repeat("cause détaillée ", 40) + "MARQUEUR_FIN"
 	report := buildReport(t, testsupport.NewTask().WithKey("HT-1").WithRootCause(rootCause).Build())
 	var buffer bytes.Buffer
-	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Full: true}, fr())
+	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Detail: cli.DetailFull}, fr())
 
 	// Act
 	err := renderer.Render(report)
@@ -199,7 +203,7 @@ func TestRenderRootCausesShowsFullTextWrapped(t *testing.T) {
 		testsupport.NewTask().WithKey("HT-2").WithRootCause(rootCause).Build(),
 	)
 	var buffer bytes.Buffer
-	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Full: true}, fr())
+	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Detail: cli.DetailFull}, fr())
 
 	// Act
 	err := renderer.Render(report)

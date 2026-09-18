@@ -9,6 +9,17 @@ import (
 	"github.com/LucasLaurens/todo-activity-report/internal/testsupport"
 )
 
+// wholeMay is the period the default task builder works in, so resolutions
+// count as in-period unless a test says otherwise.
+func wholeMay(t *testing.T) domain.DateRange {
+	t.Helper()
+	period, err := domain.ParseDateRange("2026-05-01", "2026-05-31")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return period
+}
+
 func TestCalculateAggregatesTotalsAndAverage(t *testing.T) {
 	t.Parallel()
 	// Arrange
@@ -19,7 +30,7 @@ func TestCalculateAggregatesTotalsAndAverage(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	if metrics.TotalTasks != 2 {
@@ -43,7 +54,7 @@ func TestCalculateCountsResolvedTasks(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	if metrics.ResolvedTasks != 1 {
@@ -64,7 +75,7 @@ func TestCalculateComputesMeanTimeToResolution(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	mttr, present := metrics.MTTR.Get()
@@ -87,7 +98,7 @@ func TestCalculateRanksRootCausesByFrequency(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	if len(metrics.TopRootCauses) != 2 {
@@ -110,7 +121,7 @@ func TestCalculateGroupsByAssigneeOrderedByVolume(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	if len(metrics.ByAssignee) != 2 {
@@ -133,7 +144,7 @@ func TestCalculateDistributesByStatusForProgressView(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	if len(metrics.ByStatus) != 3 {
@@ -164,7 +175,7 @@ func TestCalculateDistributesByTypeAndPriority(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(tasks)
+	metrics := calculator.Calculate(tasks, wholeMay(t))
 
 	// Assert
 	if metrics.ByType[0].Label != "Bug" || metrics.ByType[0].Count != 2 {
@@ -181,7 +192,7 @@ func TestCalculateOnEmptySetIsZeroValued(t *testing.T) {
 	calculator := application.NewMetricsCalculator()
 
 	// Act
-	metrics := calculator.Calculate(nil)
+	metrics := calculator.Calculate(nil, wholeMay(t))
 
 	// Assert
 	if metrics.TotalTasks != 0 || metrics.AvgTimeSpent.Seconds() != 0 {
@@ -206,7 +217,7 @@ func TestCalculateOrdersStatusBreakdownBlockersFirst(t *testing.T) {
 	}
 
 	// Act
-	metrics := application.NewMetricsCalculator().Calculate(tasks)
+	metrics := application.NewMetricsCalculator().Calculate(tasks, wholeMay(t))
 
 	// Assert
 	labels := make([]string, 0, len(metrics.ByStatus))

@@ -203,17 +203,16 @@ func (c *Client) authHeader() string {
 	return "Basic " + encoded
 }
 
-// buildJQL scopes the query to the project, optional assignees, and any ticket
-// touched in the window: time logged that day (worklogDate) OR a status change
-// that day (status CHANGED DURING) OR any other update that day — comments,
-// field edits, reassignments — caught by the ticket's updated timestamp. This
-// captures progress across every state — in progress, blocked, released, done —
-// not just resolved tickets.
+// buildJQL scopes the query to the project, optional assignees, and the tickets
+// worked on in the window: time logged that day (worklogDate) OR a status change
+// that day (status CHANGED DURING). This captures progress across every state —
+// in progress, blocked, released, done — not just resolved tickets.
 //
-// Jira has no commentedDate field, so comments are captured via updated, which
-// bumps on any change. status CHANGED stays in the union because it is
-// historically accurate (it matches a status change even when it is not the
-// ticket's most recent update).
+// query.IncludeTouched adds every other update of the day — comments, field
+// edits, reassignments — through the ticket's updated timestamp. It is opt-in
+// because `updated` bumps on any change by anyone, including bulk edits: on a
+// one-day report it buries the tickets the person actually worked on. Jira has
+// no commentedDate field, so a day where someone only commented needs it.
 func buildJQL(query domain.Query) string {
 	clauses := []string{fmt.Sprintf("project = %s", quote(query.Project))}
 
@@ -229,16 +228,23 @@ func buildJQL(query domain.Query) string {
 	to := query.Period.ToString()
 	fromStart := quote(from + " 00:00")
 	toEnd := quote(to + " 23:59")
-	clauses = append(clauses, fmt.Sprintf(
-		"((worklogDate >= %s AND worklogDate <= %s) OR (status CHANGED DURING (%s, %s)) OR (updated >= %s AND updated <= %s))",
-		quote(from), quote(to),
-		fromStart, toEnd,
-		fromStart, toEnd,
-	))
+
+	worked := []string{
+		fmt.Sprintf("(worklogDate >= %s AND worklogDate <= %s)", quote(from), quote(to)),
+		fmt.Sprintf("(status CHANGED DURING (%s, %s))", fromStart, toEnd),
+	}
+	if query.IncludeTouched {
+		worked = append(worked, fmt.Sprintf("(updated >= %s AND updated <= %s)", fromStart, toEnd))
+	}
+	clauses = append(clauses, "("+strings.Join(worked, " OR ")+")")
 
 	return strings.Join(clauses, " AND ") + " ORDER BY updated DESC"
 }
 
+// jqlEscaper escapes the backslash FIRST: escaping only the quote would let a
+// term ending with a backslash (`Ada\`) escape the closing quote and inject JQL.
+var jqlEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`)
+
 func quote(value string) string {
-	return "\"" + strings.ReplaceAll(value, "\"", "\\\"") + "\""
+	return `"` + jqlEscaper.Replace(value) + `"`
 }

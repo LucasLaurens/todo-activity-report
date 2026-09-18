@@ -25,39 +25,45 @@ import (
 // A binary built without it reports the placeholder.
 var version = "dev"
 
-const (
-	defaultTaskLimit = 20
-	dateLayoutFR     = "02/01/2006"
-)
+const defaultTaskLimit = 20
 
 // errNoProject asks for the board key rather than defaulting to one team's
 // project: the tool is tracker- and organisation-agnostic.
 var errNoProject = errors.New("provide --project, or set TRACKER_PROJECT in .env")
 
-const helpText = `todo-activity-report — résumé des tickets travaillés sur un tracker, quel que soit leur état (root cause, fix, temps, métriques).
+const helpText = `todo-activity-report — ce qu'une personne a fait un jour donné : temps par ticket, avancement, cause, correction, synthèse IA.
+Périmètre par défaut : temps loggué OU changement de statut (--touched élargit à toute mise à jour).
 
 Usage:
+  todo-activity-report                              # moi, dernier jour ouvré
   todo-activity-report --date='JJ/MM/AAAA' [--user='…'] [options]
   todo-activity-report --from='JJ/MM/AAAA' --to='JJ/MM/AAAA' [--user='…'] [options]
 
 Options:
-  --date         un seul jour (JJ/MM/AAAA) ; exclusif avec --from/--to
-  --from         début de plage inclus (JJ/MM/AAAA)
+  --date         jour à couvrir : JJ/MM/AAAA, 'hier' ou 'today' (défaut: dernier
+                 jour ouvré — lundi remonte à vendredi) ; exclusif avec --from/--to
+  --from         début de plage inclus (JJ/MM/AAAA, 'hier' accepté)
   --to           fin de plage incluse (JJ/MM/AAAA, jusqu'à 23:59)
-  --user         nom, email ou identifiant — répétable / séparé par virgules (vide = tous)
+  --user         nom, email ou identifiant — répétable / séparé par virgules
+                 (défaut: TRACKER_USER, sinon le compte du tracker)
+  --all          tout le board au lieu d'une seule personne ; exclusif avec --user
   --project      clé du projet / board (défaut: TRACKER_PROJECT du .env)
+  --touched      inclut aussi les tickets simplement mis à jour ce jour-là
+                 (commentaire, édition de champ, changement en masse)
   --limit        nb max de tâches détaillées (défaut: 20 ; 0 = toutes)
-  --full         affiche les textes complets (root cause / fix / résumés non tronqués)
-  --brief        n'affiche que les chiffres + la synthèse IA (masque Causes racines et Tickets)
+  --detail       niveau de détail : brief|normal|full (défaut: normal)
+                 brief = chiffres + synthèse IA ; full = textes non tronqués
   --no-ai        désactive le résumé IA
   --no-resolve   envoie les --user bruts au tracker (sans résolution d'identifiant)
   --version      affiche la version du binaire
   --help         affiche cette aide
 
 Exemples:
+  todo-activity-report                                      # ma veille ouvrée
+  todo-activity-report --date='hier' --detail=brief         # brief oral d'hier
   todo-activity-report --date='08/06/2026' --user='john.doe@example.com'
   todo-activity-report --from='01/05/2026' --to='31/05/2026' --user='John Doe' --limit=0
-  todo-activity-report --date='08/06/2026'                       # tout le board ce jour-là
+  todo-activity-report --date='08/06/2026' --all            # tout le board ce jour-là
 
 Config: tracker (TRACKER, défaut jira) et identifiants dans .env (auto-chargé).
 Voir docs/configuration.md.
@@ -81,14 +87,15 @@ type flags struct {
 	version   bool
 	project   string
 	users     stringSlice
+	all       bool
 	date      string
 	from      string
 	to        string
+	touched   bool
 	noAI      bool
 	noResolve bool
 	limit     int
-	full      bool
-	brief     bool
+	detail    string
 }
 
 func main() {
@@ -114,7 +121,12 @@ func run(args []string, out *os.File) error {
 		return err
 	}
 
-	period, err := resolvePeriod(parsed)
+	period, err := resolvePeriod(parsed, time.Now())
+	if err != nil {
+		return err
+	}
+
+	options, err := resolveRenderOptions(parsed)
 	if err != nil {
 		return err
 	}
@@ -127,6 +139,11 @@ func run(args []string, out *os.File) error {
 	project := resolveProject(parsed.project, cfg.Project())
 	if project == "" {
 		return errNoProject
+	}
+
+	assignees, err := resolveAssignees(parsed, cfg.DefaultAssignee())
+	if err != nil {
+		return err
 	}
 
 	translator := cfg.NewTranslator()
@@ -145,9 +162,10 @@ func run(args []string, out *os.File) error {
 	)
 
 	query := domain.Query{
-		Project:   project,
-		Assignees: parsed.users,
-		Period:    period,
+		Project:        project,
+		Assignees:      assignees,
+		Period:         period,
+		IncludeTouched: parsed.touched,
 	}
 
 	report, err := service.Generate(context.Background(), query)
@@ -156,7 +174,6 @@ func run(args []string, out *os.File) error {
 	}
 
 	stop()
-	options := cli.RenderOptions{TaskLimit: parsed.limit, Full: parsed.full, Brief: parsed.brief}
 	return cli.NewRenderer(out, options, translator).Render(report)
 }
 
@@ -196,15 +213,16 @@ func newFlagSet(parsed *flags, out io.Writer) *flag.FlagSet {
 	set.Usage = func() { fmt.Fprint(out, helpText) }
 
 	set.StringVar(&parsed.project, "project", "", "project / board key (default: TRACKER_PROJECT)")
-	set.Var(&parsed.users, "user", "assignee name, email or accountId (repeatable, comma-separated)")
-	set.StringVar(&parsed.date, "date", "", "single day, DD/MM/YYYY")
+	set.Var(&parsed.users, "user", "assignee name, email or identifier (repeatable, comma-separated; defaults to TRACKER_USER)")
+	set.BoolVar(&parsed.all, "all", false, "report on the whole board instead of a single person")
+	set.StringVar(&parsed.date, "date", "", "single day: DD/MM/YYYY, 'hier' or 'today' (default: last working day)")
 	set.StringVar(&parsed.from, "from", "", "range start, inclusive, DD/MM/YYYY")
 	set.StringVar(&parsed.to, "to", "", "range end, inclusive, DD/MM/YYYY")
+	set.BoolVar(&parsed.touched, "touched", false, "also include tickets merely updated in the period (comment, field edit)")
 	set.BoolVar(&parsed.noAI, "no-ai", false, "disable the AI narrative even if a key is set")
 	set.BoolVar(&parsed.noResolve, "no-resolve", false, "send --user terms to the tracker without identifier resolution")
 	set.IntVar(&parsed.limit, "limit", defaultTaskLimit, "max tasks listed in detail (0 = all)")
-	set.BoolVar(&parsed.full, "full", false, "show full root cause / fix / summaries (no truncation)")
-	set.BoolVar(&parsed.brief, "brief", false, "show only the metrics and the AI summary (hide root causes and ticket list)")
+	set.StringVar(&parsed.detail, "detail", "", "how much to print: "+cli.DetailLevelNames())
 	set.BoolVar(&parsed.version, "version", false, "print the binary version and exit")
 
 	return set
@@ -219,37 +237,59 @@ func resolveProject(flagValue, configured string) string {
 	return configured
 }
 
-// resolvePeriod accepts either a single --date or a --from/--to range.
-func resolvePeriod(parsed flags) (domain.DateRange, error) {
-	if parsed.date != "" {
-		if parsed.from != "" || parsed.to != "" {
-			return domain.DateRange{}, fmt.Errorf("use either --date or --from/--to, not both")
-		}
-		day, err := parseDateFR(parsed.date)
+// resolvePeriod accepts a single --date, a --from/--to range, or nothing at all
+// — in which case the report covers the last working day, the question asked
+// nine times out of ten ("what did I do yesterday?").
+func resolvePeriod(parsed flags, now time.Time) (domain.DateRange, error) {
+	if parsed.from == "" && parsed.to == "" {
+		day, err := domain.ParseDay(parsed.date, now)
 		if err != nil {
 			return domain.DateRange{}, err
 		}
 		return domain.NewDateRange(day, day)
 	}
 
-	if parsed.from == "" || parsed.to == "" {
-		return domain.DateRange{}, fmt.Errorf("provide --date, or both --from and --to (DD/MM/YYYY)")
+	if parsed.date != "" {
+		return domain.DateRange{}, fmt.Errorf("use either --date or --from/--to, not both")
 	}
-	from, err := parseDateFR(parsed.from)
+	if parsed.from == "" || parsed.to == "" {
+		return domain.DateRange{}, fmt.Errorf("provide both --from and --to (DD/MM/YYYY)")
+	}
+	from, err := domain.ParseDay(parsed.from, now)
 	if err != nil {
 		return domain.DateRange{}, err
 	}
-	to, err := parseDateFR(parsed.to)
+	to, err := domain.ParseDay(parsed.to, now)
 	if err != nil {
 		return domain.DateRange{}, err
 	}
 	return domain.NewDateRange(from, to)
 }
 
-func parseDateFR(value string) (time.Time, error) {
-	parsed, err := time.Parse(dateLayoutFR, value)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date %q, expected DD/MM/YYYY", value)
+// resolveAssignees targets one person by default — the configured account — so
+// a bare run answers "what did I do?". --user names someone else, --all widens
+// the report to the whole board. Without a configured account, the report stays
+// board-wide, as before.
+func resolveAssignees(parsed flags, configured string) ([]string, error) {
+	if parsed.all {
+		if len(parsed.users) > 0 {
+			return nil, fmt.Errorf("use either --user or --all, not both")
+		}
+		return nil, nil
 	}
-	return parsed, nil
+	if len(parsed.users) > 0 {
+		return parsed.users, nil
+	}
+	if configured == "" {
+		return nil, nil
+	}
+	return []string{configured}, nil
+}
+
+func resolveRenderOptions(parsed flags) (cli.RenderOptions, error) {
+	detail, err := cli.ParseDetailLevel(parsed.detail)
+	if err != nil {
+		return cli.RenderOptions{}, err
+	}
+	return cli.RenderOptions{TaskLimit: parsed.limit, Detail: detail}, nil
 }

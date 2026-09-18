@@ -29,9 +29,6 @@ type worklogAuthor struct {
 // period. When authors is non-empty, only those accountIds' worklogs count, so
 // "--user" yields that person's time on that day rather than the team's.
 func (c *Client) periodTimeSpent(ctx context.Context, key string, period domain.DateRange, authors map[string]bool) (int, error) {
-	from := period.From()
-	toExclusive := period.To().AddDate(0, 0, 1)
-
 	total := 0
 	startAt := 0
 	for {
@@ -43,8 +40,7 @@ func (c *Client) periodTimeSpent(ctx context.Context, key string, period domain.
 			if len(authors) > 0 && !authors[entry.Author.AccountID] {
 				continue
 			}
-			started := parseTime(entry.Started)
-			if started.Before(from) || !started.Before(toExclusive) {
+			if !period.Contains(parseTime(entry.Started)) {
 				continue
 			}
 			total += entry.TimeSpentSeconds

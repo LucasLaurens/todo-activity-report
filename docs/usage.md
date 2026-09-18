@@ -32,14 +32,17 @@ APP_LOCALE=en ./todo-activity-report --date='08/06/2026'
 
 Une fonction zsh (dans `~/.zshrc`, hors dépôt) évite de retaper les flags du
 quotidien. Sans argument, elle demande la date (défaut : aujourd'hui) puis
-l'utilisateur (vide = l'utilisateur par défaut codé dans la fonction, `all` =
-tout le board), et appelle le binaire avec `--brief` :
+l'utilisateur (vide = `TRACKER_USER`, `all` = tout le board), et appelle le
+binaire avec `--detail=brief` :
 
 ```bash
 activity-report
-# Date (JJ/MM/AAAA) [28/08/2026] :
-# User (nom/email, vide = <défaut>, 'all' = tous) :
+# Date (JJ/MM/AAAA, 'hier', vide = veille ouvrée) :
+# User (nom/email, vide = <TRACKER_USER>, 'all' = tous) :
 ```
+
+Une réponse vide laisse parler les défauts du binaire : pas de `--date` envoyé
+(donc la veille ouvrée), pas de `--user` (donc `TRACKER_USER`).
 
 Dès qu'un argument commençant par `-` est passé, la fonction rend la main au
 binaire sans jouer les prompts — l'aide et les invocations explicites restent
@@ -57,27 +60,44 @@ de code, relancer `go build -o todo-activity-report ./cmd/todo-activity-report`.
 
 | Flag | Défaut | Description |
 |------|--------|-------------|
-| `--date` | — | un seul jour, `JJ/MM/AAAA` (exclusif avec `--from`/`--to`) |
-| `--from` | — | début de plage inclus, `JJ/MM/AAAA` |
+| `--date` | dernier jour ouvré | un seul jour : `JJ/MM/AAAA`, `hier`/`yesterday`, `today`/`aujourd'hui` (exclusif avec `--from`/`--to`) |
+| `--from` | — | début de plage inclus, `JJ/MM/AAAA` (mots-clés acceptés) |
 | `--to` | — | fin de plage incluse, `JJ/MM/AAAA` |
-| `--user` | (vide = tous) | nom, email **ou** identifiant du tracker — répétable / séparé par virgules |
+| `--user` | `TRACKER_USER` | nom, email **ou** identifiant du tracker — répétable / séparé par virgules |
+| `--all` | `false` | tout le board au lieu d'une personne (exclusif avec `--user`) |
+| `--touched` | `false` | inclut aussi les tickets **simplement mis à jour** ce jour-là (commentaire, édition de champ, changement en masse) |
 | `--project` | `TRACKER_PROJECT` | clé du projet / board (la **clé**, pas le nom du board) |
 | `--no-ai` | `false` | désactive le résumé IA |
 | `--version` | — | affiche la version du binaire et sort (aucune config requise) |
 | `--no-resolve` | `false` | passe les termes `--user` bruts au tracker, sans résolution d'identifiant |
 | `--limit` | `20` | nombre max de tâches listées en détail (`0` = toutes) |
-| `--full` | `false` | affiche les textes complets (root cause / fix / résumés non tronqués) |
-| `--brief` | `false` | n'affiche que les métriques + la synthèse IA (masque Causes racines et Tickets) |
+| `--detail` | `normal` | niveau de détail : `brief` (chiffres + synthèse IA), `normal`, `full` (textes non tronqués) |
 | `--help` | — | affiche l'aide (usage, options, exemples) puis quitte |
 
 Fournir **soit** `--date`, **soit** `--from` ET `--to`. La fin de plage est
 inclusive jusqu'à 23:59 du jour.
 
+### Par défaut : la personne configurée, au dernier jour ouvré
+
+Sans aucun flag, le rapport couvre **une personne** (`TRACKER_USER`, sinon le
+compte du tracker) sur le **dernier jour ouvré** — lundi remonte à vendredi, un
+lancement samedi/dimanche aussi. C'est la question posée neuf fois sur dix :
+
+```bash
+./todo-activity-report                      # moi, dernier jour ouvré
+./todo-activity-report --date='hier'        # moi, hier (jour calendaire)
+./todo-activity-report --user='John Doe'    # quelqu'un d'autre
+./todo-activity-report --all                # tout le board
+```
+
+Sans `TRACKER_USER` ni compte lisible, le rapport reste board-wide comme avant.
+
 ### Tâches du jour
 
 ```bash
-./todo-activity-report --date='08/06/2026' --user='john.doe@example.com'        # les tiennes
-./todo-activity-report --date='08/06/2026'                                      # tout le board
+./todo-activity-report --date='08/06/2026'                                      # les tiennes
+./todo-activity-report --date='08/06/2026' --user='john.doe@example.com'        # celles d'un autre
+./todo-activity-report --date='08/06/2026' --all                                # tout le board
 ```
 
 ### Progression (loader)
@@ -202,44 +222,57 @@ puis décommenter :
 
 <!-- ![Sortie colorée par statut](images/sortie-couleurs.png) -->
 
-## Périmètre : ce qui est « processé » un jour
+## Périmètre : ce qui est « travaillé » un jour
 
-Un ticket apparaît s'il a, sur la période :
+Par défaut, un ticket apparaît s'il a, sur la période :
 
 - **du temps loggué** ce jour-là (`worklogDate`), **ou**
-- un **changement de statut** ce jour-là (`status CHANGED DURING`), **ou**
-- **toute autre mise à jour** ce jour-là — commentaire, édition de champ,
-  réassignation — captée par le timestamp `updated`.
+- un **changement de statut** ce jour-là (`status CHANGED DURING`).
 
-Jira n'expose pas de champ `commentedDate` : les commentaires sont donc captés
-via `updated`, qui bouge à chaque modification. `status CHANGED` reste dans
-l'union car il est historiquement exact (il matche un changement de statut même
-quand ce n'est pas la dernière mise à jour du ticket).
+C'est le signal « du travail a été fait dessus » : on voit tous les tickets
+réellement travaillés, quel que soit leur état actuel (en cours, bloqué,
+release, terminé), pas seulement les terminés. Triés par dernière mise à jour
+(`updated DESC`).
 
-Union des trois → on voit tous les tickets réellement touchés, quel que soit
-leur état actuel (en cours, bloqué, release, terminé), pas seulement les
-terminés. Triés par dernière mise à jour (`updated DESC`).
+### `--touched` : élargir à toute mise à jour
+
+`--touched` ajoute l'union avec `updated` : tout ticket modifié ce jour-là —
+commentaire, édition de champ, réassignation.
+
+C'est **opt-in** parce qu'`updated` bouge à **chaque** modification, **par
+n'importe qui** : un changement en masse ou le commentaire d'un collègue fait
+remonter des tickets sur lesquels la personne n'a rien fait, et ça noie le
+rapport d'une journée. Jira n'exposant pas de champ `commentedDate`, une journée
+passée uniquement à commenter a besoin de `--touched` pour être visible.
 
 ## Métriques calculées
 
 | Métrique | Définition |
 |----------|------------|
-| Total tasks | nombre de tickets processés sur la période |
+| Total tasks | nombre de tickets travaillés sur la période |
+| **Répartition du temps** | temps loggué **par ticket**, du plus long au plus court, avec sa **part du total** ; les tickets touchés sans temps loggué sont seulement comptés. Bornée par `--limit` comme la liste de tickets, masquée si rien n'a été loggué |
 | **By status** | répartition par statut actuel — **l'état d'avancée** (en cours / bloqué / release / terminé…) |
-| Resolved | tickets déjà résolus (date de résolution présente) parmi les processés |
-| Time logged (period) / Avg | **temps réellement loggué pendant la période** (worklog), pas le cumul du ticket |
-| MTTR | temps moyen création → résolution (résolutions antérieures à la création exclues) ; `n/a` si rien de résolu |
-| By assignee | volume + résolus + temps loggué par personne |
+| Resolved | tickets dont la **date de résolution tombe dans la période** — un ticket résolu il y a trois mois et seulement touché aujourd'hui ne compte pas |
+| Temps loggé (en tant qu'assigné) / Moyenne | **temps réellement loggué pendant la période** (worklog), pas le cumul du ticket — et seulement sur les tickets **assignés** à la sélection (voir plus bas). Sans ciblage (`--all`), le libellé redevient « Temps loggé » |
+| MTTR | temps moyen création → résolution, sur les **résolutions de la période** uniquement (résolutions antérieures à la création exclues) ; `n/a` si rien n'a été résolu dans la période |
+| By assignee | volume + résolus **dans la période** + temps loggué par personne |
 | By type / priority | distributions |
 | Causes racines récurrentes | causes touchant ≥2 tickets (top 5) ; masquée si aucune — les causes uniques restent visibles sous chaque ticket |
 
-### Temps loggué = worklog du jour, par auteur
+### Temps loggué = worklog du jour, sur les tickets assignés
 
 Pour chaque ticket, le CLI appelle `GET /rest/api/3/issue/{key}/worklog` et somme
 les entrées dont la date (`started`) tombe dans la période. Si `--user` est
 fourni, **seuls** les worklogs de ces personnes comptent → tu vois le temps que
 *cette* personne a passé *ce* jour-là. Un ticket affiché à `0m` est apparu via
-un **changement de statut** (sans temps loggué ce jour).
+un **changement de statut** (sans temps loggué ce jour), ou via `--touched`.
+
+**Le filtre s'applique deux fois** : la requête ne ramène que les tickets
+**assignés** à la personne, puis on ne garde que **ses** worklogs. Le temps
+qu'elle a loggué sur un ticket assigné à quelqu'un d'autre — une revue, un coup
+de main — **n'est donc pas compté**. D'où le libellé « Temps loggé (en tant
+qu'assigné) » et la note sous la synthèse ; pour ce temps-là, passer par `--all`
+et lire la section « Par personne ».
 
 > Coût : un appel worklog par ticket (N+1). Négligeable pour un jour / un user ;
 > plus lourd sur de larges plages.
@@ -247,7 +280,7 @@ un **changement de statut** (sans temps loggué ce jour).
 ## Automatisation : note quotidienne dans l'app Notes (macOS)
 
 [scripts/activity-notes.sh](../scripts/activity-notes.sh) lance le rapport
-`--brief` de la **veille ouvrée** (lundi → vendredi précédent ; sam/dim → rien)
+`--detail=brief` de la **veille ouvrée** (lundi → vendredi précédent ; sam/dim → rien)
 pour la personne visée et le sauvegarde dans Notes (titre
 `Résumé d'activité — JJ/MM/AAAA`) **si la note n'existe pas déjà**.
 

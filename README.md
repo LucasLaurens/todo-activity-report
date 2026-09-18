@@ -1,10 +1,12 @@
 # todo-activity-report
 
-CLI Go qui résume, pour un **jour** (ou une plage) et des **personnes** donnés,
-tout ce qui a été **travaillé** sur un board — chaque ticket avec du temps
-loggué, un changement de statut **ou** toute autre mise à jour (commentaire,
-édition de champ) ce jour-là, **quel que soit son état**
-(en cours, bloqué, release, terminé). Sortie **en français** (ou anglais), avec
+CLI Go qui répond à « qu'est-ce que cette personne a fait ce jour-là, et combien
+de temps sur quoi ? ». Sans aucun flag : **la personne configurée**, au **dernier
+jour ouvré**. Il résume, pour un **jour** (ou une plage) et des **personnes**
+donnés, tout ce qui a été **travaillé** sur un board — chaque ticket avec du
+temps loggué **ou** un changement de statut ce jour-là, **quel que soit son
+état** (en cours, bloqué, release, terminé) ; `--touched` élargit à toute mise à
+jour (commentaire, édition de champ). Sortie **en français** (ou anglais), avec
 un **résumé IA** automatique via le CLI `claude` local (sans clé API).
 
 Le tracker est un **adapter interchangeable** : Jira est fourni, brancher un
@@ -43,6 +45,15 @@ voir [docs/install.md](docs/install.md).
 
 # En anglais, sans résumé IA
 APP_LOCALE=en ./todo-activity-report --date='08/06/2026' --no-ai
+
+# Ce que la personne configurée a fait au dernier jour ouvré
+./todo-activity-report
+
+# Hier, en brief oral : chiffres + synthèse IA
+./todo-activity-report --date='hier' --detail=brief
+
+# Tout le board sur un jour
+./todo-activity-report --date='08/06/2026' --all
 ```
 
 ## Aperçu de la sortie
@@ -54,9 +65,16 @@ Période : 2026-06-08 → 2026-06-08   Personnes : john.doe@example.com
 Synthèse
   Tickets traités            14
   Résolus                    0 (0%)
-  Temps loggé                6h 55m
-  Moyenne / ticket           29m
-  Délai moyen de résolution  n/a
+  Temps loggé (en tant qu'assigné)  6h 55m
+  Moyenne / ticket                  29m
+  Délai moyen de résolution         n/a
+    Ne compte que le temps loggué sur les tickets assignés à cette sélection :
+    un worklog sur un ticket assigné à quelqu'un d'autre n'apparaît pas.
+
+Répartition du temps
+  ACME-8212   2h 00m   29%  Toggle champ obligatoire non actionnable
+  ACME-10424  2h 30m   36%  Catégories non ajoutées au parcours
+  9 tickets touchés sans temps loggé
 
 Avancement
   Bloqué       11
@@ -86,9 +104,10 @@ Synthèse IA
 | `--from` / `--to` | plage `JJ/MM/AAAA` (fin incluse) |
 | `--user` | nom, email ou identifiant — répétable / séparé par virgules (vide = tous) |
 | `--project` | clé du projet / board (défaut : `TRACKER_PROJECT` du `.env`) |
+| `--all` | tout le board au lieu d'une personne (exclusif avec `--user`) |
+| `--touched` | inclut aussi les tickets simplement mis à jour (commentaire, édition de champ) |
 | `--limit` | nb max de tickets détaillés (défaut 20 ; `0` = tous) |
-| `--full` | textes complets (root cause / fix / résumés non tronqués) |
-| `--brief` | chiffres + synthèse IA seulement (masque Causes racines et Tickets) |
+| `--detail` | `brief` (chiffres + synthèse IA), `normal` (défaut), `full` (textes non tronqués) |
 | `--no-ai` | désactive le résumé IA |
 | `--no-resolve` | passe les `--user` bruts au tracker (sans résolution d'identifiant) |
 | `--version` | version du binaire (tag gravé au build, `dev` en local) |
@@ -116,6 +135,7 @@ charge seul, depuis le répertoire courant **puis** depuis son propre dossier.
 |----------|--------------|
 | `TRACKER` | nom de l'adapter, `jira` par défaut. Ce n'est pas un secret |
 | `TRACKER_PROJECT` | la clé du board, telle qu'elle apparaît dans les clés de ticket (`ACME-1042` → `ACME`) |
+| `TRACKER_USER` | la personne ciblée sans `--user` (défaut : le compte du tracker) |
 | `JIRA_BASE_URL` | l'URL de ton site Atlassian, sans chemin — `https://your-org.atlassian.net`. **HTTPS obligatoire**, le CLI refuse le HTTP |
 | `JIRA_EMAIL` | l'adresse du compte Atlassian, celle qui a généré le token |
 | `JIRA_API_TOKEN` | https://id.atlassian.com/manage-profile/security/api-tokens → *Create API token* → copie la valeur, elle n'est affichée qu'**une seule fois** |

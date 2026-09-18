@@ -53,6 +53,7 @@ l'infrastructure connaît l'application via des interfaces (ports).
 | `internal/i18n` | Traductions fr/en (JSON embarqués), `Translator`. | aucune |
 | `internal/infrastructure/jira` | Adapter Jira — **une implémentation de `ports.Tracker` parmi d'autres** (HTTP + JQL + pagination + mapping + résolution d'utilisateurs + validation de sa propre config). | domain |
 | `internal/infrastructure/llm` | `ClaudeCLISummarizer` (CLI local) + `ClaudeSummarizer` (API) + `NoopSummarizer`. | domain |
+| `internal/infrastructure/sanitize` | `Printable` : retire séquences ANSI et caractères de contrôle de tout texte venu de l'extérieur (tracker, réponse du modèle). | aucune |
 | `internal/infrastructure/cli` | Rendu terminal (`tabwriter`, couleurs ANSI d'après `domain.StatusKind`) + `Spinner`/`NoopProgress` (loader). | domain |
 | `internal/config` | Lecture env → config typée → fabriques d'adapters. | tout |
 | `internal/testsupport` | Implémentations in-memory concrètes (tests). | domain |

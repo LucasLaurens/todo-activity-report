@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/llm"
+)
 
 func TestAnthropicConfigDefaultsModelAndDisabledWithoutKey(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "")
@@ -10,7 +14,7 @@ func TestAnthropicConfigDefaultsModelAndDisabledWithoutKey(t *testing.T) {
 	cfg := anthropicConfigFromEnv()
 
 	// Assert
-	if cfg.model != defaultAnthropicModel {
+	if cfg.model != llm.DefaultModel {
 		t.Fatalf("expected default model, got %q", cfg.model)
 	}
 	if cfg.enabled() {

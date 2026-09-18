@@ -16,6 +16,16 @@ type LabelCount struct {
 	Count int
 }
 
+// TaskTime is one ticket's slice of the period: the time logged on it and the
+// share of the total that represents — the answer to "where did the day go?".
+type TaskTime struct {
+	Key       string
+	Summary   string
+	Status    string
+	TimeSpent TimeSpent
+	Share     float64
+}
+
 // Metrics is the deterministic aggregation computed from the tasks.
 type Metrics struct {
 	TotalTasks     int
@@ -24,6 +34,8 @@ type Metrics struct {
 	AvgTimeSpent   TimeSpent
 	MTTR           Optional[time.Duration]
 	ByAssignee     []AssigneeMetrics
+	TimeBreakdown  []TaskTime
+	UntimedTasks   int
 	ByStatus       []LabelCount
 	ByType         []LabelCount
 	ByPriority     []LabelCount

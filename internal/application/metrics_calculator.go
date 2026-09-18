@@ -20,15 +20,21 @@ func NewMetricsCalculator() MetricsCalculator {
 	return MetricsCalculator{topRootCauses: defaultTopRootCauses}
 }
 
-func (c MetricsCalculator) Calculate(tasks []domain.Task) domain.Metrics {
+// Calculate aggregates the tasks over the period they were pulled for. The
+// period matters: a ticket resolved months ago and merely touched during the
+// period is not one of its resolutions.
+func (c MetricsCalculator) Calculate(tasks []domain.Task, period domain.DateRange) domain.Metrics {
 	total := totalTimeSpent(tasks)
+	breakdown, untimed := buildTimeBreakdown(tasks, total)
 	return domain.Metrics{
 		TotalTasks:     len(tasks),
-		ResolvedTasks:  countResolved(tasks),
+		ResolvedTasks:  countResolvedWithin(tasks, period),
 		TotalTimeSpent: total,
 		AvgTimeSpent:   total.DividedBy(len(tasks)),
-		MTTR:           meanTimeToResolution(tasks),
-		ByAssignee:     groupByAssignee(tasks),
+		MTTR:           meanTimeToResolution(tasks, period),
+		ByAssignee:     groupByAssignee(tasks, period),
+		TimeBreakdown:  breakdown,
+		UntimedTasks:   untimed,
 		ByStatus:       statusDistribution(tasks),
 		ByType:         distribution(tasks, func(t domain.Task) string { return t.Type }),
 		ByPriority:     distribution(tasks, func(t domain.Task) string { return t.Priority }),
@@ -36,10 +42,10 @@ func (c MetricsCalculator) Calculate(tasks []domain.Task) domain.Metrics {
 	}
 }
 
-func countResolved(tasks []domain.Task) int {
+func countResolvedWithin(tasks []domain.Task, period domain.DateRange) int {
 	resolved := 0
 	for _, task := range tasks {
-		if task.IsResolved() {
+		if task.IsResolvedWithin(period) {
 			resolved++
 		}
 	}
@@ -54,10 +60,15 @@ func totalTimeSpent(tasks []domain.Task) domain.TimeSpent {
 	return total
 }
 
-func meanTimeToResolution(tasks []domain.Task) domain.Optional[time.Duration] {
+// meanTimeToResolution averages creation → resolution over the tickets resolved
+// *within* the period: an older resolution says nothing about this period.
+func meanTimeToResolution(tasks []domain.Task, period domain.DateRange) domain.Optional[time.Duration] {
 	var sum time.Duration
 	count := 0
 	for _, task := range tasks {
+		if !task.IsResolvedWithin(period) {
+			continue
+		}
 		if duration, ok := task.ResolutionDuration().Get(); ok {
 			sum += duration
 			count++
@@ -69,7 +80,7 @@ func meanTimeToResolution(tasks []domain.Task) domain.Optional[time.Duration] {
 	return domain.Some(sum / time.Duration(count))
 }
 
-func groupByAssignee(tasks []domain.Task) []domain.AssigneeMetrics {
+func groupByAssignee(tasks []domain.Task, period domain.DateRange) []domain.AssigneeMetrics {
 	index := make(map[string]*domain.AssigneeMetrics)
 	for _, task := range tasks {
 		entry, ok := index[task.Assignee]
@@ -79,7 +90,7 @@ func groupByAssignee(tasks []domain.Task) []domain.AssigneeMetrics {
 		}
 		entry.Total++
 		entry.TimeSpent = entry.TimeSpent.Add(task.TimeSpent)
-		if task.IsResolved() {
+		if task.IsResolvedWithin(period) {
 			entry.Resolved++
 		}
 	}

@@ -42,6 +42,12 @@ func (r DateRange) To() time.Time {
 	return r.to
 }
 
+// Contains reports whether a moment falls in the range, whose last day counts
+// in full: the period is inclusive, so 23:59 of the "to" day is still inside.
+func (r DateRange) Contains(moment time.Time) bool {
+	return !moment.Before(r.from) && moment.Before(r.to.AddDate(0, 0, 1))
+}
+
 func (r DateRange) FromString() string {
 	return r.from.Format(dateLayout)
 }

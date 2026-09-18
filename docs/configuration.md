@@ -25,6 +25,11 @@ courant. Les variables déjà présentes dans l'environnement **gardent la prior
 découpée sur le **premier** `=` (un token en contient souvent), et les guillemets
 entourants sont retirés.
 
+Un `.env` **accessible en écriture à tout le monde** (bit `o+w`) est **ignoré**,
+avec un avertissement sur stderr : il porte les identifiants du tracker et son
+URL de base, donc quiconque peut le réécrire pourrait les faire partir ailleurs.
+`chmod o-w .env` (ou `chmod 600 .env`) le rend de nouveau lisible par le CLI.
+
 ## Le pont env → application (façon Laravel)
 
 Comme Laravel sépare `.env` (secrets bruts) de `config/*.php` (config typée
@@ -49,8 +54,9 @@ typée. Changer un nom de variable = un seul fichier à toucher.
 | `APP_LOCALE` | non | `fr` | langue de la sortie et du résumé IA (`fr` ou `en`) |
 | `TRACKER` | non | `jira` | adapter de tracker à utiliser — voir [trackers.md](trackers.md) |
 | `TRACKER_PROJECT` | oui\* | — | clé du projet / board par défaut (\* sauf si `--project` est passé) |
+| `TRACKER_USER` | non | le compte du tracker | personne ciblée quand `--user` est absent ; vide et sans compte lisible = tout le board |
 | `JIRA_BASE_URL` | oui\*\* | — | URL instance Jira Cloud (`https://org.atlassian.net`) |
-| `JIRA_EMAIL` | oui\*\* | — | email du compte / bot |
+| `JIRA_EMAIL` | oui\*\* | — | email du compte / bot ; sert aussi de `TRACKER_USER` par défaut |
 | `JIRA_API_TOKEN` | oui\*\* | — | token API Atlassian |
 | `JIRA_ROOT_CAUSE_FIELD` | non | — | id champ custom root cause (`customfield_XXXXX`) |
 | `JIRA_CORRECTION_FIELD` | non | — | id champ custom correction |
@@ -109,11 +115,24 @@ Le résumé narratif est produit par la **première** option disponible :
 
 `--no-ai` force le mode 3 quelle que soit la disponibilité.
 
+### Quand l'IA échoue
+
+Le narratif est un bonus par-dessus des métriques déjà calculées : s'il échoue
+(CLI tué, dépassement du budget de 4 minutes, API injoignable), le CLI **affiche
+quand même le rapport** et sort en 0, avec la cause sur stderr :
+
+```
+warning: no AI summary (claude cli timed out after 4m0s)
+```
+
+Le prompt est plafonné à **20 tickets et 3 commentaires par ticket** pour tenir
+ce budget. Un prompt encore trop long ? Réduire la période, ou passer `--no-ai`.
+
 ## Confidentialité du résumé IA
 
 Le narratif envoie les titres, root causes, corrections **et les commentaires
-récents** (5 derniers par ticket, max ~280 caractères chacun) des tâches de la
-période à Claude (via le CLI ou l'API). Les commentaires peuvent contenir des
+récents** (3 derniers par ticket, max ~280 caractères chacun) des **20 premiers
+tickets** de la période à Claude (via le CLI ou l'API). Les commentaires peuvent contenir des
 échanges internes sensibles — c'est désormais transmis au service Claude pour
 affiner la synthèse. Si non souhaité, passer `--no-ai`. Tout le reste
 (métriques) est calculé localement, sans aucun appel.

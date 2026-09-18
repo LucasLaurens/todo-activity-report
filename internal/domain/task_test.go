@@ -18,19 +18,6 @@ func baseTask() domain.Task {
 	}
 }
 
-func TestTaskIsResolvedReflectsResolutionDate(t *testing.T) {
-	t.Parallel()
-	// Act & Assert
-	if !baseTask().IsResolved() {
-		t.Fatal("expected resolved task")
-	}
-	unresolved := baseTask()
-	unresolved.ResolvedAt = domain.None[time.Time]()
-	if unresolved.IsResolved() {
-		t.Fatal("expected unresolved task")
-	}
-}
-
 func TestResolutionDurationComputesDelta(t *testing.T) {
 	t.Parallel()
 	// Act

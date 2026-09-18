@@ -98,7 +98,7 @@ func TestNewClaudeSummarizerDefaultsModel(t *testing.T) {
 	s := NewClaudeSummarizer("key", "", i18n.NewTranslator(i18n.French), nil)
 
 	// Assert
-	if s.model != defaultModel || s.endpoint != messagesEndpoint {
+	if s.model != DefaultModel || s.endpoint != messagesEndpoint {
 		t.Fatalf("expected defaults, got model=%q endpoint=%q", s.model, s.endpoint)
 	}
 }

@@ -29,8 +29,13 @@ type Comment struct {
 	Body   string
 }
 
-func (t Task) IsResolved() bool {
-	return t.ResolvedAt.IsPresent()
+// IsResolvedWithin reports whether the ticket was resolved *during* the period.
+// A ticket resolved months ago and merely touched today is not a resolution of
+// today: counting it would inflate the resolution rate and the MTTR of a
+// one-day report.
+func (t Task) IsResolvedWithin(period DateRange) bool {
+	resolvedAt, ok := t.ResolvedAt.Get()
+	return ok && period.Contains(resolvedAt)
 }
 
 // ResolutionDuration is the wall-clock time from creation to resolution. A

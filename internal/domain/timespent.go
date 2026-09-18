@@ -35,6 +35,15 @@ func (t TimeSpent) DividedBy(n int) TimeSpent {
 	return TimeSpent{seconds: t.seconds / n}
 }
 
+// ShareOf is this duration's fraction of a total, in [0, 1]. An empty total
+// yields 0 rather than a division by zero.
+func (t TimeSpent) ShareOf(total TimeSpent) float64 {
+	if total.seconds == 0 {
+		return 0
+	}
+	return float64(t.seconds) / float64(total.seconds)
+}
+
 func (t TimeSpent) String() string {
 	hours := t.seconds / secondsPerHour
 	minutes := (t.seconds % secondsPerHour) / 60

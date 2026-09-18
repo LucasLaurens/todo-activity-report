@@ -68,7 +68,7 @@ func TestStringSliceSetTrimsAndSplits(t *testing.T) {
 func TestResolvePeriodSingleDay(t *testing.T) {
 	t.Parallel()
 	// Act
-	period, err := resolvePeriod(flags{date: "08/06/2026"})
+	period, err := resolvePeriod(flags{date: "08/06/2026"}, wednesday())
 
 	// Assert
 	if err != nil {
@@ -82,7 +82,7 @@ func TestResolvePeriodSingleDay(t *testing.T) {
 func TestResolvePeriodRange(t *testing.T) {
 	t.Parallel()
 	// Act
-	period, err := resolvePeriod(flags{from: "01/05/2026", to: "31/05/2026"})
+	period, err := resolvePeriod(flags{from: "01/05/2026", to: "31/05/2026"}, wednesday())
 
 	// Assert
 	if err != nil {
@@ -96,7 +96,7 @@ func TestResolvePeriodRange(t *testing.T) {
 func TestResolvePeriodRejectsDateAndRangeTogether(t *testing.T) {
 	t.Parallel()
 	// Act
-	_, err := resolvePeriod(flags{date: "08/06/2026", from: "01/05/2026"})
+	_, err := resolvePeriod(flags{date: "08/06/2026", from: "01/05/2026"}, wednesday())
 
 	// Assert
 	if err == nil {
@@ -107,7 +107,7 @@ func TestResolvePeriodRejectsDateAndRangeTogether(t *testing.T) {
 func TestResolvePeriodRequiresBothRangeBounds(t *testing.T) {
 	t.Parallel()
 	// Act
-	_, err := resolvePeriod(flags{from: "01/05/2026"})
+	_, err := resolvePeriod(flags{from: "01/05/2026"}, wednesday())
 
 	// Assert
 	if err == nil {
@@ -118,25 +118,11 @@ func TestResolvePeriodRequiresBothRangeBounds(t *testing.T) {
 func TestResolvePeriodRejectsBadDate(t *testing.T) {
 	t.Parallel()
 	// Act
-	_, err := resolvePeriod(flags{date: "2026-06-08"}) // wrong format
+	_, err := resolvePeriod(flags{date: "2026-06-08"}, wednesday()) // wrong format
 
 	// Assert
 	if err == nil {
 		t.Fatal("expected error on non DD/MM/YYYY date")
-	}
-}
-
-func TestParseDateFR(t *testing.T) {
-	t.Parallel()
-	// Act
-	day, err := parseDateFR("08/06/2026")
-
-	// Assert
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if day.Year() != 2026 || day.Month() != 6 || day.Day() != 8 {
-		t.Fatalf("unexpected date: %v", day)
 	}
 }
 

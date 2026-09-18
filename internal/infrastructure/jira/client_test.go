@@ -87,8 +87,8 @@ func TestFetchTasksMapsIssueIncludingCustomFields(t *testing.T) {
 	if task.TimeSpent.Hours() != 2 {
 		t.Fatalf("expected 2h time spent, got %v", task.TimeSpent.Hours())
 	}
-	if !task.IsResolved() {
-		t.Fatal("expected task to be resolved")
+	if !task.ResolvedAt.IsPresent() {
+		t.Fatal("expected task to carry its resolution date")
 	}
 }
 
@@ -217,7 +217,6 @@ func TestFetchTasksSendsScopedJQLWithBasicAuth(t *testing.T) {
 		`worklogDate >= "2026-05-01"`,
 		`worklogDate <= "2026-05-31"`,
 		`status CHANGED DURING ("2026-05-01 00:00", "2026-05-31 23:59")`,
-		`updated >= "2026-05-01 00:00" AND updated <= "2026-05-31 23:59"`,
 	} {
 		if !strings.Contains(capturedJQL, fragment) {
 			t.Fatalf("expected JQL to contain %q, got %q", fragment, capturedJQL)

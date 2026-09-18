@@ -42,7 +42,7 @@ func TestPaintStatusStaysPlainWithoutColor(t *testing.T) {
 	renderer := Renderer{color: false}
 
 	// Act
-	painted := renderer.paintByStatus("Bloqué")
+	painted := renderer.paintByStatus(0, "Bloqué")
 
 	// Assert
 	if painted != "Bloqué" {

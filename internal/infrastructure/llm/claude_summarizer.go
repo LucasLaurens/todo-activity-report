@@ -11,12 +11,15 @@ import (
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
 	messagesEndpoint = "https://api.anthropic.com/v1/messages"
 	anthropicVersion = "2023-06-01"
-	defaultModel     = "claude-sonnet-4-6"
+	// DefaultModel is the model the narrative uses unless ANTHROPIC_MODEL says
+	// otherwise. Declared here, next to the API client that sends it.
+	DefaultModel     = "claude-sonnet-4-6"
 	defaultMaxTokens = 1024
 )
 
@@ -32,7 +35,7 @@ type ClaudeSummarizer struct {
 
 func NewClaudeSummarizer(apiKey, model string, translator i18n.Translator, httpClient *http.Client) ClaudeSummarizer {
 	if model == "" {
-		model = defaultModel
+		model = DefaultModel
 	}
 	if httpClient == nil {
 		httpClient = http.DefaultClient
@@ -114,5 +117,5 @@ func joinTextBlocks(blocks []contentBlock) string {
 			builder.WriteString(block.Text)
 		}
 	}
-	return strings.TrimSpace(builder.String())
+	return strings.TrimSpace(sanitize.Printable(builder.String()))
 }

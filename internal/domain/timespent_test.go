@@ -92,3 +92,19 @@ func TestTimeSpentStringFormatsHoursAndMinutes(t *testing.T) {
 		t.Fatalf("expected \"2h 05m\", got %q", formatted)
 	}
 }
+
+func TestShareOfReturnsTheFractionOfTheTotal(t *testing.T) {
+	t.Parallel()
+	// Act & Assert
+	if share := domain.NewTimeSpent(3600).ShareOf(domain.NewTimeSpent(14400)); share != 0.25 {
+		t.Fatalf("expected a quarter, got %v", share)
+	}
+}
+
+func TestShareOfAnEmptyTotalIsZero(t *testing.T) {
+	t.Parallel()
+	// Act & Assert
+	if share := domain.NewTimeSpent(3600).ShareOf(domain.NewTimeSpent(0)); share != 0 {
+		t.Fatalf("expected zero, got %v", share)
+	}
+}
