@@ -19,7 +19,7 @@ type issueDTO struct {
 type issueFields struct {
 	Summary            string        `json:"summary"`
 	Status             namedValue    `json:"status"`
-	Assignee           *assignee     `json:"assignee"`
+	Assignee           *jiraUser     `json:"assignee"`
 	IssueType          namedValue    `json:"issuetype"`
 	Priority           *namedValue   `json:"priority"`
 	Created            string        `json:"created"`
@@ -38,7 +38,7 @@ type commentField struct {
 // commentDTO holds one comment. Body is decoded as any: Jira returns an
 // Atlassian Document Format object (API v3), occasionally a plain string.
 type commentDTO struct {
-	Author *assignee `json:"author"`
+	Author *jiraUser `json:"author"`
 	Body   any       `json:"body"`
 }
 
@@ -46,6 +46,8 @@ type namedValue struct {
 	Name string `json:"name"`
 }
 
-type assignee struct {
+// jiraUser is a person as Jira shows one: the assignee of an issue or the
+// author of a comment.
+type jiraUser struct {
 	DisplayName string `json:"displayName"`
 }

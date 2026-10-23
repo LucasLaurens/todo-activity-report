@@ -3,24 +3,19 @@ package jira_test
 import (
 	"context"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
-	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/jira"
 )
 
 func captureJQL(t *testing.T, query domain.Query) string {
 	t.Helper()
 	var captured string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		captured = r.URL.Query().Get("jql")
 		w.Write([]byte(`{"issues":[]}`))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 	if _, err := client.FetchTasks(context.Background(), query); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
