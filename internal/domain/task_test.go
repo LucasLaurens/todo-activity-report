@@ -53,15 +53,22 @@ func TestResolutionDurationAbsentWhenResolvedBeforeCreated(t *testing.T) {
 	}
 }
 
-func TestHasRootCause(t *testing.T) {
+func TestHasRootCauseWhenOneIsFilled(t *testing.T) {
 	t.Parallel()
 	// Act & Assert
 	if !baseTask().HasRootCause() {
 		t.Fatal("expected root cause present")
 	}
-	empty := baseTask()
-	empty.RootCause = ""
-	if empty.HasRootCause() {
+}
+
+func TestHasRootCauseIsFalseWhenEmpty(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	task := baseTask()
+	task.RootCause = ""
+
+	// Act & Assert
+	if task.HasRootCause() {
 		t.Fatal("expected no root cause")
 	}
 }

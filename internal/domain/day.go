@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-// DayLayout is the date format the CLI speaks, matching how the team writes
+// dayLayout is the date format the CLI speaks, matching how the team writes
 // dates in Jira and in chat.
-const DayLayout = "02/01/2006"
+const dayLayout = "02/01/2006"
 
 // relativeDays are the shortcuts accepted instead of a date, expressed as a
 // number of days before today. "the day before" is what the report is asked for
@@ -33,7 +33,7 @@ func ParseDay(value string, now time.Time) (time.Time, error) {
 	if daysBefore, ok := relativeDays[trimmed]; ok {
 		return startOfDay(now).AddDate(0, 0, -daysBefore), nil
 	}
-	parsed, err := time.ParseInLocation(DayLayout, trimmed, now.Location())
+	parsed, err := time.ParseInLocation(dayLayout, trimmed, now.Location())
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid date %q, expected DD/MM/YYYY, 'hier' or 'today'", value)
 	}

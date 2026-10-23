@@ -59,3 +59,9 @@ type Report struct {
 	Metrics   Metrics
 	Narrative Optional[string]
 }
+
+// HasAssigneeFilter reports whether the report covers chosen people rather than
+// the whole board.
+func (r Report) HasAssigneeFilter() bool {
+	return len(r.Assignees) > 0
+}

@@ -12,7 +12,7 @@ Les règles de test ont leur propre page ([testing.md](testing.md)), les command
 | Principe | Application |
 |----------|-------------|
 | **S**RP | `MetricsCalculator` calcule, `Renderer` affiche, `Client` parle à Jira — une raison de changer chacun |
-| **O**CP | nouveau tracker = nouvel adapter + une entrée dans `trackerBuilders` ; ni le domaine ni le use case ne changent |
+| **O**CP | nouveau tracker = nouvel adapter + une entrée dans `trackerRegistry` ; ni le domaine ni le use case ne changent |
 | **L**SP | `NoopSummarizer`/`ClaudeSummarizer` et `PassthroughResolver`/tracker interchangeables derrière leur port |
 | **I**SP | ports minimaux : `TaskProvider`, `UserResolver`, `Summarizer`, `ProgressReporter` — une méthode chacun ; `Tracker` ne fait que composer les deux premiers |
 | **D**IP | `ReportService` dépend des interfaces `ports.*`, jamais des structs concrets |
@@ -21,8 +21,8 @@ Les règles de test ont leur propre page ([testing.md](testing.md)), les command
 
 - **Adapter** — `jira.Client`, `llm.ClaudeSummarizer` adaptent un service externe à un port.
 - **Strategy** — narratif via `ClaudeCLISummarizer` / `ClaudeSummarizer` / `NoopSummarizer`, choisi à l'exécution.
-- **Registry** — `config.trackerBuilders` : `TRACKER` → builder d'adapter. Le seul endroit qui nomme un outil concret.
-- **Factory / Composition root** — `config.Config.NewTracker()` / `NewUserResolver()` / `NewSummarizer()`.
+- **Registry** — `config.trackerRegistry` : `TRACKER` → `trackerEntry` (builder d'adapter + variable du compte par défaut). Le seul endroit qui nomme un tracker concret.
+- **Factory / Composition root** — `config.Config.NewTracker()` / `NewSummarizer()` / `NewOfflineSummarizer()`.
 - **Null Object** — `NoopSummarizer`, `NoopProgress`, `application.PassthroughResolver` évitent les dépendances nil.
 - **Repository** — `TaskProvider` abstrait la source de données.
 - **Builder** — `testsupport.TaskBuilder`.
@@ -30,9 +30,11 @@ Les règles de test ont leur propre page ([testing.md](testing.md)), les command
 
 ## Data structures & algorithmes
 
-- Agrégations en O(n) via maps (`groupByAssignee`, `distribution`).
-- `sortedCounts` : tri par count décroissant, **label en tie-break** → sortie
-  déterministe (donc testable).
+- Agrégations en O(n) via maps (`groupByAssignee`, `countLabels`).
+- `sortLabelCounts` : tri par rang (attention pour les statuts, égal sinon), puis
+  count décroissant, **label en tie-break** → sortie déterministe (donc
+  testable). Les rangs sont calculés une fois par label / ticket, jamais à
+  chaque comparaison (`sortByAttention` aussi).
 - `Optional[T]` générique : pas de sentinelle magique, pas de nil.
 
 ## Pas de valeurs magiques
