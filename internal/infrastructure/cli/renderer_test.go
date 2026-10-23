@@ -195,15 +195,16 @@ func TestRenderRootCausesConciseByDefault(t *testing.T) {
 }
 
 func TestRenderRootCausesShowsFullTextWrapped(t *testing.T) {
+	t.Parallel()
 	// Arrange — full mode shows the complete recurring cause, wrapped to a fixed width.
-	t.Setenv("COLUMNS", "60")
+	const width = 60
 	rootCause := strings.Repeat("analyse technique détaillée ", 12) + "MARQUEUR_FINAL"
 	report := buildReport(t,
 		testsupport.NewTask().WithKey("HT-1").WithRootCause(rootCause).Build(),
 		testsupport.NewTask().WithKey("HT-2").WithRootCause(rootCause).Build(),
 	)
 	var buffer bytes.Buffer
-	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Detail: cli.DetailFull}, fr())
+	renderer := cli.NewRenderer(&buffer, cli.RenderOptions{Detail: cli.DetailFull, Width: width}, fr())
 
 	// Act
 	err := renderer.Render(report)
@@ -224,8 +225,8 @@ func TestRenderRootCausesShowsFullTextWrapped(t *testing.T) {
 	}
 	for _, line := range strings.Split(section, "\n") {
 		if strings.HasPrefix(line, "  • analyse") || strings.HasPrefix(line, "    analyse") {
-			if width := utf8.RuneCountInString(line); width > 60 {
-				t.Fatalf("wrapped line exceeds width 60 (%d): %q", width, line)
+			if lineWidth := utf8.RuneCountInString(line); lineWidth > width {
+				t.Fatalf("wrapped line exceeds width %d (%d): %q", width, lineWidth, line)
 			}
 		}
 	}

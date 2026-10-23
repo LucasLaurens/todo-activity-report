@@ -29,7 +29,7 @@ func TestRenderTimeBreakdownColorsEachRowByItsOwnStatus(t *testing.T) {
 	}
 
 	// Act
-	if err := renderer.renderTimeBreakdown(report); err != nil {
+	if err := renderer.Render(report); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

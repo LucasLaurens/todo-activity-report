@@ -70,8 +70,10 @@ Où générer chaque token, et ceux utilisés autour du dépôt sans passer par
 `.env` : [README, section Tokens et secrets](../README.md#tokens-et-secrets).
 | `NO_COLOR` | non | — | si défini (non vide), désactive la colorimétrie ANSI des statuts |
 
-`NO_COLOR` et `COLUMNS` décrivent le terminal, pas l'app : ils sont lus directement
-par la couche de rendu (`internal/infrastructure/cli`), sans passer par `internal/config`.
+`NO_COLOR` et `COLUMNS` décrivent le terminal, pas l'app : ils ne passent pas par
+`internal/config`. `NO_COLOR` est lu directement par la couche de rendu
+(`internal/infrastructure/cli`) ; `COLUMNS` est lu par `cmd` et transmis au rendu
+via `cli.RenderOptions.Width` (0 ou moins de 40 → largeur par défaut de 100).
 
 ### Langue (i18n)
 
