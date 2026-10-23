@@ -6,3 +6,13 @@ package ports
 type ProgressReporter interface {
 	Stage(label string)
 }
+
+// The stages the use case reports, in order. Each label doubles as the i18n
+// message key the spinner translates, so a new stage needs an entry in every
+// catalog (the i18n tests check it).
+const (
+	StageResolve = "stage_resolve"
+	StageFetch   = "stage_fetch"
+	StageMetrics = "stage_metrics"
+	StageSummary = "stage_summary"
+)

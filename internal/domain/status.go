@@ -49,18 +49,19 @@ func ClassifyStatus(status string) StatusKind {
 	return StatusNotStarted
 }
 
-// attentionOrder ranks the kinds as the report reads them: what blocks first,
+// attentionOrder lists the kinds as the report reads them: what blocks first,
 // then what is moving, then what shipped, then what is not started, and last
 // what was abandoned.
-var attentionOrder = map[StatusKind]int{
-	StatusBlocked:    0,
-	StatusInFlight:   1,
-	StatusDone:       2,
-	StatusNotStarted: 3,
-	StatusAbandoned:  4,
-}
+var attentionOrder = []StatusKind{StatusBlocked, StatusInFlight, StatusDone, StatusNotStarted, StatusAbandoned}
 
-// AttentionRank is the sort key that puts the blocking subjects first.
+// AttentionRank is the sort key that puts the blocking subjects first. A kind
+// missing from attentionOrder sinks to the bottom rather than posing as a
+// blocker. O(k) for k kinds, a handful.
 func (k StatusKind) AttentionRank() int {
-	return attentionOrder[k]
+	for rank, kind := range attentionOrder {
+		if kind == k {
+			return rank
+		}
+	}
+	return len(attentionOrder)
 }

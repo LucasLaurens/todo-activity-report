@@ -81,3 +81,55 @@ func TestProjectComesFromEnvironment(t *testing.T) {
 		t.Fatalf("expected project ABC, got %q", cfg.Project())
 	}
 }
+
+func loadDefaultAssignee(t *testing.T) string {
+	t.Helper()
+	cfg, err := config.Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return cfg.DefaultAssignee()
+}
+
+func TestDefaultAssigneePrefersTrackerUser(t *testing.T) {
+	// Arrange
+	setJiraEnv(t, "https://example.atlassian.net")
+	t.Setenv("TRACKER_USER", "ada@example.com")
+
+	// Act
+	assignee := loadDefaultAssignee(t)
+
+	// Assert
+	if assignee != "ada@example.com" {
+		t.Fatalf("expected TRACKER_USER, got %q", assignee)
+	}
+}
+
+func TestDefaultAssigneeFallsBackToTheTrackerAccount(t *testing.T) {
+	// Arrange — the Jira entry names JIRA_EMAIL as its signed-in account.
+	setJiraEnv(t, "https://example.atlassian.net")
+	t.Setenv("TRACKER_USER", "")
+
+	// Act
+	assignee := loadDefaultAssignee(t)
+
+	// Assert
+	if assignee != "bot@example.com" {
+		t.Fatalf("expected the Jira account, got %q", assignee)
+	}
+}
+
+func TestDefaultAssigneeIsEmptyWithoutAnyAccount(t *testing.T) {
+	// Arrange
+	setJiraEnv(t, "https://example.atlassian.net")
+	t.Setenv("JIRA_EMAIL", "")
+	t.Setenv("TRACKER_USER", "")
+
+	// Act
+	assignee := loadDefaultAssignee(t)
+
+	// Assert
+	if assignee != "" {
+		t.Fatalf("expected no default assignee, got %q", assignee)
+	}
+}

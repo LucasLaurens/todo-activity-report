@@ -6,14 +6,37 @@ import (
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 )
 
-func TestQueryHasAssigneeFilter(t *testing.T) {
+func TestHasAssigneeFilter(t *testing.T) {
 	t.Parallel()
-	// Act & Assert
-	if (domain.Query{}).HasAssigneeFilter() {
-		t.Fatal("expected no filter for empty assignees")
+	cases := []struct {
+		name      string
+		assignees []string
+		expected  bool
+	}{
+		{name: "whole board", assignees: nil, expected: false},
+		{name: "chosen people", assignees: []string{"u1"}, expected: true},
 	}
-	if !(domain.Query{Assignees: []string{"u1"}}).HasAssigneeFilter() {
-		t.Fatal("expected filter when assignees present")
+	for _, tc := range cases {
+		t.Run("query/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Act
+			filtered := domain.Query{Assignees: tc.assignees}.HasAssigneeFilter()
+
+			// Assert
+			if filtered != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, filtered)
+			}
+		})
+		t.Run("report/"+tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Act
+			filtered := domain.Report{Assignees: tc.assignees}.HasAssigneeFilter()
+
+			// Assert
+			if filtered != tc.expected {
+				t.Fatalf("expected %v, got %v", tc.expected, filtered)
+			}
+		})
 	}
 }
 

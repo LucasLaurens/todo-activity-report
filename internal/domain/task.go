@@ -5,7 +5,8 @@ import (
 	"time"
 )
 
-// Task is a resolved unit of work pulled from the tracker.
+// Task is a ticket processed during the reported period, whatever its status:
+// time logged on it or its status moved (or, with --touched, any update).
 type Task struct {
 	Key        string
 	Summary    string
@@ -53,16 +54,13 @@ func (t Task) HasRootCause() bool {
 	return t.RootCause != ""
 }
 
-func (t Task) HasComments() bool {
-	return len(t.Comments) > 0
-}
-
 // blockingCommentKeywords flag a comment that reports a blocker, so a ticket
 // can read as blocked even when its status does not say so (« In progress dev »
 // with « bloqué par l'infra » in the thread).
 var blockingCommentKeywords = []string{"bloqu", "blocked", "blocker", "blocage", "impedi", "en attente", "waiting for", "stuck"}
 
-// HasBlockingComment reports whether a recent comment mentions a blocker.
+// HasBlockingComment reports whether any comment the tracker returned for the
+// ticket mentions a blocker.
 func (t Task) HasBlockingComment() bool {
 	for _, comment := range t.Comments {
 		lowered := strings.ToLower(comment.Body)

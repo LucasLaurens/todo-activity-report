@@ -60,6 +60,22 @@ func TestTimeSpentHoursAndSeconds(t *testing.T) {
 	}
 }
 
+func TestTimeSpentIsZeroWithoutLoggedTime(t *testing.T) {
+	t.Parallel()
+	// Act & Assert
+	if !domain.NewTimeSpent(0).IsZero() {
+		t.Fatal("expected no logged time to be zero")
+	}
+}
+
+func TestTimeSpentIsNotZeroWithLoggedTime(t *testing.T) {
+	t.Parallel()
+	// Act & Assert
+	if domain.NewTimeSpent(1).IsZero() {
+		t.Fatal("expected one second to be non-zero")
+	}
+}
+
 func TestTimeSpentDividedByPositive(t *testing.T) {
 	t.Parallel()
 	// Act
