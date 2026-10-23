@@ -97,7 +97,7 @@ func TestResolveAssigneesRejectsAllCombinedWithUser(t *testing.T) {
 func TestResolveRenderOptionsReadsTheDetailLevel(t *testing.T) {
 	t.Parallel()
 	// Act
-	options, err := resolveRenderOptions(flags{detail: "brief", limit: 5})
+	options, err := resolveRenderOptions(flags{detail: "brief", limit: 5}, "")
 
 	// Assert
 	if err != nil {
@@ -111,7 +111,7 @@ func TestResolveRenderOptionsReadsTheDetailLevel(t *testing.T) {
 func TestResolveRenderOptionsRejectsAnUnknownDetailLevel(t *testing.T) {
 	t.Parallel()
 	// Act
-	_, err := resolveRenderOptions(flags{detail: "verbose"})
+	_, err := resolveRenderOptions(flags{detail: "verbose"}, "")
 
 	// Assert
 	if err == nil {
@@ -130,5 +130,33 @@ func TestParseFlagsReadsTouched(t *testing.T) {
 	}
 	if !parsed.touched {
 		t.Fatalf("expected --touched to be read, got %+v", parsed)
+	}
+}
+
+func TestResolveRenderOptionsCarriesTheTerminalWidth(t *testing.T) {
+	t.Parallel()
+	// Act
+	options, err := resolveRenderOptions(flags{}, "132")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if options.Width != 132 {
+		t.Fatalf("expected width 132 from COLUMNS, got %d", options.Width)
+	}
+}
+
+func TestResolveRenderOptionsFallsBackOnAnUnreadableWidth(t *testing.T) {
+	t.Parallel()
+	// Act
+	options, err := resolveRenderOptions(flags{}, "wide")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if options.Width != 0 {
+		t.Fatalf("expected the default width (0), got %d", options.Width)
 	}
 }
