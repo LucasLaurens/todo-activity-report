@@ -21,7 +21,7 @@ n'empêche pas les trois autres de rendre leur verdict.
 |-------|----------|-------------------|
 | `format` | `test -z "$(gofmt -l .)"` | tout le code est formaté |
 | `vet` | `go vet ./...` | analyse statique du toolchain |
-| `lint` | `golangci-lint run` (v2.1.0, voir [`.golangci.yml`](../.golangci.yml)) | style et bugs courants |
+| `lint` | `golangci-lint run` (v2.12.2, voir [`.golangci.yml`](../.golangci.yml)) | style et bugs courants |
 | `test` | `go test -race -coverpkg=./... ./...` | suite verte, sans data race, couverture affichée |
 
 Ce sont exactement les 4 commandes à passer en local avant de commiter :
@@ -67,5 +67,17 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Aucun secret à configurer : le `GITHUB_TOKEN` fourni au workflow
-(`permissions: contents: write`) suffit à créer la Release.
+Aucun secret à configurer : le `GITHUB_TOKEN` fourni au workflow suffit à
+créer la Release.
+
+## Sécurité du pipeline
+
+- **Droits minimaux** : le workflow est en `contents: read` ; seul le job
+  `release` reçoit `contents: write`. Une action tierce des checks qualité ne
+  tient jamais un token capable de réécrire une Release.
+- **Actions épinglées par SHA** (tag en commentaire) : un tag déplacé chez un
+  tiers ne peut pas changer le code qui compile et publie les binaires.
+- **Toolchain patché** : `GO_VERSION` = la ligne `toolchain` de `go.mod`
+  (`internal/architecture/toolchain_test.go` échoue s'ils divergent). La stdlib
+  embarquée dans les binaires porte donc les correctifs de sécurité ; v1.2.0,
+  compilée en Go 1.22.12, en embarquait 63 vulnérabilités connues.

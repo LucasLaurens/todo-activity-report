@@ -109,7 +109,8 @@ Le résumé narratif est produit par la **première** option disponible :
 
 1. **CLI `claude`** présent sur le `PATH` → appelé en headless
    (`claude -p --output-format text`). Réutilise ton login Claude Code,
-   **aucune clé API nécessaire**. C'est le mode automatique.
+   **aucune clé API nécessaire**. C'est le mode automatique. L'appel est
+   **isolé** (voir [ci-dessous](#isolation-du-cli-claude)).
 2. sinon **`ANTHROPIC_API_KEY`** défini → appel à l'API Anthropic.
 3. sinon **aucun narratif** (les métriques restent calculées).
 
@@ -136,6 +137,23 @@ tickets** de la période à Claude (via le CLI ou l'API). Les commentaires peuve
 échanges internes sensibles — c'est désormais transmis au service Claude pour
 affiner la synthèse. Si non souhaité, passer `--no-ai`. Tout le reste
 (métriques) est calculé localement, sans aucun appel.
+
+### Isolation du CLI `claude`
+
+Titres et commentaires sont écrits par n'importe qui ayant accès au board : un
+commentaire piégé (« utilise ton outil Read sur ~/.ssh… ») ne doit rien pouvoir
+déclencher. Le CLI est donc lancé comme simple générateur de texte :
+
+| Flag / réglage | Effet |
+|----------------|-------|
+| `--tools ""` | aucun outil (ni Read, ni Bash, ni WebFetch) |
+| `--strict-mcp-config` | aucun serveur MCP |
+| `--setting-sources user` | seuls tes réglages utilisateur ; les hooks et réglages d'un projet ne s'appliquent pas |
+| `--no-session-persistence` | aucune transcription des tickets laissée dans `~/.claude` |
+| répertoire de travail vide (temporaire) | ni `CLAUDE.md`, ni `.claude/`, ni `.env` du dossier courant |
+
+Un CLI `claude` trop ancien pour ces flags échoue : le rapport sort sans
+synthèse, avec l'erreur sur stderr. Mettre à jour Claude Code.
 
 Voir [jira-setup.md](jira-setup.md) pour obtenir les identifiants Jira, et
 [trackers.md](trackers.md) pour brancher un autre outil.

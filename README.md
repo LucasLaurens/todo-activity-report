@@ -48,7 +48,7 @@ Détails, mise à jour et désinstallation : [docs/install.md](docs/install.md).
 
 ### Depuis les sources
 
-Go 1.22 ou plus :
+Go 1.22 ou plus (il télécharge seul le toolchain patché épinglé dans `go.mod`) :
 
 ```bash
 git clone https://github.com/LucasLaurens/todo-activity-report.git
