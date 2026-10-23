@@ -46,3 +46,21 @@ func firstGroup(t *testing.T, pattern *regexp.Regexp, text, what string) string 
 	}
 	return match[1]
 }
+
+var ciStaticBuild = regexp.MustCompile(`CGO_ENABLED=0 GOOS=`)
+
+// A native build on the linux/amd64 runner enables cgo and links that binary
+// against the runner's libc, while the docs promise a static binary.
+func TestCIReleaseBuildsStaticBinaries(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	workflow := readRepoFile(t, "../../.github/workflows/ci.yml")
+
+	// Act
+	static := ciStaticBuild.MatchString(workflow)
+
+	// Assert
+	if !static {
+		t.Fatal("ci.yml must build every release target with CGO_ENABLED=0")
+	}
+}
