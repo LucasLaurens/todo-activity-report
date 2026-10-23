@@ -1,15 +1,21 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/LucasLaurens/todo-activity-report/internal/application"
+	"github.com/LucasLaurens/todo-activity-report/internal/application/ports"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/cli"
 	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/jira"
+	"github.com/LucasLaurens/todo-activity-report/internal/testsupport"
 )
 
 func TestParseFlagsReadsValues(t *testing.T) {
@@ -42,12 +48,18 @@ func TestParseFlagsHelpReturnsErrHelp(t *testing.T) {
 
 func TestParseFlagsRejectsUnknownFlag(t *testing.T) {
 	t.Parallel()
+	// Arrange
+	var out bytes.Buffer
+
 	// Act
-	_, err := parseFlags([]string{"--nope"}, io.Discard)
+	_, err := parseFlags([]string{"--nope"}, &out)
 
 	// Assert
 	if err == nil || errors.Is(err, flag.ErrHelp) {
 		t.Fatalf("expected a non-help parse error, got %v", err)
+	}
+	if printed := strings.Count(out.String(), helpText); printed != 1 {
+		t.Fatalf("expected the help printed once, got %d times", printed)
 	}
 }
 
@@ -57,10 +69,13 @@ func TestStringSliceSetTrimsAndSplits(t *testing.T) {
 	var s stringSlice
 
 	// Act
-	_ = s.Set("  a , b ,, c ")
+	err := s.Set("  a , b ,, c ")
 
 	// Assert
-	if len(s) != 3 || s[0] != "a" || s[2] != "c" {
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s) != 3 || s[0] != "a" || s[1] != "b" || s[2] != "c" {
 		t.Fatalf("unexpected slice: %v", s)
 	}
 }
@@ -99,8 +114,8 @@ func TestResolvePeriodRejectsDateAndRangeTogether(t *testing.T) {
 	_, err := resolvePeriod(flags{date: "08/06/2026", from: "01/05/2026"}, wednesday())
 
 	// Assert
-	if err == nil {
-		t.Fatal("expected error when --date combined with --from/--to")
+	if !errors.Is(err, errDateWithRange) {
+		t.Fatalf("expected errDateWithRange, got %v", err)
 	}
 }
 
@@ -110,8 +125,8 @@ func TestResolvePeriodRequiresBothRangeBounds(t *testing.T) {
 	_, err := resolvePeriod(flags{from: "01/05/2026"}, wednesday())
 
 	// Assert
-	if err == nil {
-		t.Fatal("expected error when only --from is set")
+	if !errors.Is(err, errIncompleteRange) {
+		t.Fatalf("expected errIncompleteRange, got %v", err)
 	}
 }
 
@@ -139,7 +154,10 @@ func tempFile(t *testing.T) *os.File {
 func TestRunHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
 	// Act — --help prints usage and returns nil (handled ErrHelp).
-	if err := run([]string{"--help"}, tempFile(t)); err != nil {
+	err := run([]string{"--help"}, tempFile(t), tempFile(t))
+
+	// Assert
+	if err != nil {
 		t.Fatalf("expected nil on --help, got %v", err)
 	}
 }
@@ -147,7 +165,10 @@ func TestRunHelpExitsCleanly(t *testing.T) {
 func TestRunRejectsBadDateBeforeConfig(t *testing.T) {
 	t.Parallel()
 	// Act — invalid date fails at period resolution, before any config/network.
-	if err := run([]string{"--date=2026-06-08"}, tempFile(t)); err == nil {
+	err := run([]string{"--date=2026-06-08"}, tempFile(t), tempFile(t))
+
+	// Assert
+	if err == nil {
 		t.Fatal("expected an error on bad date format")
 	}
 }
@@ -157,7 +178,7 @@ func TestRunFailsWithoutProject(t *testing.T) {
 	t.Setenv("TRACKER_PROJECT", "")
 
 	// Act
-	err := run([]string{"--date=08/06/2026"}, tempFile(t))
+	err := run([]string{"--date=08/06/2026"}, tempFile(t), tempFile(t))
 
 	// Assert
 	if !errors.Is(err, errNoProject) {
@@ -173,7 +194,7 @@ func TestRunFailsWithoutTrackerCredentials(t *testing.T) {
 	t.Setenv("JIRA_API_TOKEN", "")
 
 	// Act
-	err := run([]string{"--date=08/06/2026"}, tempFile(t))
+	err := run([]string{"--date=08/06/2026"}, tempFile(t), tempFile(t))
 
 	// Assert
 	if !errors.Is(err, jira.ErrMissingConfig) {
@@ -183,12 +204,23 @@ func TestRunFailsWithoutTrackerCredentials(t *testing.T) {
 
 func TestResolveProjectPrefersTheFlag(t *testing.T) {
 	t.Parallel()
-	// Act & Assert
-	if got := resolveProject("ACME", "FALLBACK"); got != "ACME" {
-		t.Fatalf("expected the flag to win, got %q", got)
+	// Act
+	project := resolveProject("ACME", "FALLBACK")
+
+	// Assert
+	if project != "ACME" {
+		t.Fatalf("expected the flag to win, got %q", project)
 	}
-	if got := resolveProject("", "FALLBACK"); got != "FALLBACK" {
-		t.Fatalf("expected the configured default, got %q", got)
+}
+
+func TestResolveProjectFallsBackToTheConfiguredBoard(t *testing.T) {
+	t.Parallel()
+	// Act
+	project := resolveProject("", "FALLBACK")
+
+	// Assert
+	if project != "FALLBACK" {
+		t.Fatalf("expected the configured default, got %q", project)
 	}
 }
 
@@ -200,12 +232,24 @@ func TestNewProgressNoopWhenNotTerminal(t *testing.T) {
 		t.Fatalf("pipe: %v", err)
 	}
 	defer reader.Close()
-	defer writer.Close()
 
 	// Act — a pipe is not a TTY → no-op reporter, no-op stop.
 	reporter, stop := newProgress(writer, i18n.NewTranslator(i18n.French))
-	reporter.Stage("noop")
+	reporter.Stage(ports.StageFetch)
 	stop()
+
+	// Assert
+	if _, isNoop := reporter.(cli.NoopProgress); !isNoop {
+		t.Fatalf("expected cli.NoopProgress, got %T", reporter)
+	}
+	writer.Close()
+	drawn, readErr := io.ReadAll(reader)
+	if readErr != nil {
+		t.Fatalf("read pipe: %v", readErr)
+	}
+	if len(drawn) != 0 {
+		t.Fatalf("expected nothing drawn on a pipe, got %q", drawn)
+	}
 }
 
 func TestIsTerminalFalseForPipe(t *testing.T) {
@@ -252,7 +296,7 @@ func TestRunPrintsTheVersionWithoutAnyConfiguration(t *testing.T) {
 	out := tempFile(t)
 
 	// Act
-	err := run([]string{"--version"}, out)
+	err := run([]string{"--version"}, out, tempFile(t))
 
 	// Assert
 	if err != nil {
@@ -265,5 +309,54 @@ func TestRunPrintsTheVersionWithoutAnyConfiguration(t *testing.T) {
 	expected := "todo-activity-report " + version + "\n"
 	if string(printed) != expected {
 		t.Fatalf("expected %q, got %q", expected, printed)
+	}
+}
+
+func TestHelpTextShowsTheDefaultTaskLimit(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	documented := fmt.Sprintf("défaut: %d ;", defaultTaskLimit)
+
+	// Act & Assert
+	if !strings.Contains(helpText, documented) {
+		t.Fatalf("expected helpText to document the --limit default %q", documented)
+	}
+}
+
+// inMemoryTracker composes the concrete fakes into a ports.Tracker.
+type inMemoryTracker struct {
+	*testsupport.InMemoryTaskProvider
+	*testsupport.InMemoryUserResolver
+}
+
+func newInMemoryTracker() inMemoryTracker {
+	return inMemoryTracker{testsupport.NewInMemoryTaskProvider(), testsupport.NewPassthroughResolver()}
+}
+
+func TestSelectUserResolverPassesTermsThroughWithNoResolve(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	tracker := newInMemoryTracker()
+
+	// Act
+	resolver := selectUserResolver(flags{noResolve: true}, tracker)
+
+	// Assert
+	if _, isPassthrough := resolver.(application.PassthroughResolver); !isPassthrough {
+		t.Fatalf("expected a PassthroughResolver, got %T", resolver)
+	}
+}
+
+func TestSelectUserResolverLetsTheTrackerResolveByDefault(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	tracker := newInMemoryTracker()
+
+	// Act
+	resolver := selectUserResolver(flags{}, tracker)
+
+	// Assert
+	if resolver != ports.UserResolver(tracker) {
+		t.Fatalf("expected the tracker as resolver, got %T", resolver)
 	}
 }

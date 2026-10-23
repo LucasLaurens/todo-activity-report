@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"io"
 	"testing"
 	"time"
@@ -88,8 +89,8 @@ func TestResolveAssigneesRejectsAllCombinedWithUser(t *testing.T) {
 	_, err := resolveAssignees(flags{all: true, users: stringSlice{"Ada"}}, "lucas@example.com")
 
 	// Assert
-	if err == nil {
-		t.Fatal("expected an error when --all is combined with --user")
+	if !errors.Is(err, errUserWithAll) {
+		t.Fatalf("expected errUserWithAll, got %v", err)
 	}
 }
 

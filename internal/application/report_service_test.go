@@ -3,21 +3,14 @@ package application_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/application"
+	"github.com/LucasLaurens/todo-activity-report/internal/application/ports"
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/testsupport"
 )
-
-func newPeriod(t *testing.T) domain.DateRange {
-	t.Helper()
-	period, err := domain.ParseDateRange("2026-05-01", "2026-05-31")
-	if err != nil {
-		t.Fatalf("unexpected error building period: %v", err)
-	}
-	return period
-}
 
 func TestGenerateProducesReportWithMetricsAndNarrative(t *testing.T) {
 	t.Parallel()
@@ -27,8 +20,8 @@ func TestGenerateProducesReportWithMetricsAndNarrative(t *testing.T) {
 	}
 	provider := testsupport.NewInMemoryTaskProvider(tasks...)
 	summarizer := testsupport.NewInMemorySummarizer("All good this sprint.")
-	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), summarizer, testsupport.NewNoopProgress())
-	query := domain.Query{Project: "ACME", Period: newPeriod(t)}
+	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), summarizer, testsupport.NewRecordingProgress())
+	query := domain.Query{Project: "ACME", Period: wholeMay(t)}
 
 	// Act
 	report, err := service.Generate(context.Background(), query)
@@ -50,8 +43,8 @@ func TestGenerateForwardsQueryToProvider(t *testing.T) {
 	t.Parallel()
 	// Arrange
 	provider := testsupport.NewInMemoryTaskProvider()
-	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), testsupport.NewNoopProgress())
-	query := domain.Query{Project: "ACME", Assignees: []string{"Ada"}, Period: newPeriod(t)}
+	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), testsupport.NewRecordingProgress())
+	query := domain.Query{Project: "ACME", Assignees: []string{"Ada"}, Period: wholeMay(t)}
 
 	// Act
 	_, err := service.Generate(context.Background(), query)
@@ -70,8 +63,8 @@ func TestGenerateResolvesAssigneeTermsToAccountIds(t *testing.T) {
 	// Arrange
 	provider := testsupport.NewInMemoryTaskProvider()
 	resolver := testsupport.NewInMemoryUserResolver(map[string]string{"Ada Lovelace": "712020:abc"})
-	service := application.NewReportService(provider, resolver, testsupport.NewSilentSummarizer(), testsupport.NewNoopProgress())
-	query := domain.Query{Project: "ACME", Assignees: []string{"Ada Lovelace"}, Period: newPeriod(t)}
+	service := application.NewReportService(provider, resolver, testsupport.NewSilentSummarizer(), testsupport.NewRecordingProgress())
+	query := domain.Query{Project: "ACME", Assignees: []string{"Ada Lovelace"}, Period: wholeMay(t)}
 
 	// Act
 	report, err := service.Generate(context.Background(), query)
@@ -92,18 +85,19 @@ func TestGenerateReportsProgressStages(t *testing.T) {
 	t.Parallel()
 	// Arrange
 	provider := testsupport.NewInMemoryTaskProvider(testsupport.NewTask().Build())
-	progress := testsupport.NewNoopProgress()
+	progress := testsupport.NewRecordingProgress()
 	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), progress)
 
 	// Act
-	_, err := service.Generate(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
+	_, err := service.Generate(context.Background(), domain.Query{Project: "ACME", Period: wholeMay(t)})
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(progress.Stages) != 4 {
-		t.Fatalf("expected 4 progress stages, got %d: %v", len(progress.Stages), progress.Stages)
+	expected := []string{ports.StageResolve, ports.StageFetch, ports.StageMetrics, ports.StageSummary}
+	if !slices.Equal(progress.Stages, expected) {
+		t.Fatalf("expected stages %v, got %v", expected, progress.Stages)
 	}
 }
 
@@ -111,10 +105,10 @@ func TestGenerateLeavesNarrativeAbsentWhenSummarizerIsSilent(t *testing.T) {
 	t.Parallel()
 	// Arrange
 	provider := testsupport.NewInMemoryTaskProvider(testsupport.NewTask().Build())
-	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), testsupport.NewNoopProgress())
+	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), testsupport.NewRecordingProgress())
 
 	// Act
-	report, err := service.Generate(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
+	report, err := service.Generate(context.Background(), domain.Query{Project: "ACME", Period: wholeMay(t)})
 
 	// Assert
 	if err != nil {
@@ -130,10 +124,10 @@ func TestGeneratePropagatesProviderError(t *testing.T) {
 	// Arrange
 	wantErr := errors.New("tracker unreachable")
 	provider := testsupport.NewInMemoryTaskProvider().WithError(wantErr)
-	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), testsupport.NewNoopProgress())
+	service := application.NewReportService(provider, testsupport.NewPassthroughResolver(), testsupport.NewSilentSummarizer(), testsupport.NewRecordingProgress())
 
 	// Act
-	_, err := service.Generate(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
+	_, err := service.Generate(context.Background(), domain.Query{Project: "ACME", Period: wholeMay(t)})
 
 	// Assert
 	if !errors.Is(err, wantErr) {
@@ -155,9 +149,9 @@ func TestGenerateReadsBlockingTicketsFirst(t *testing.T) {
 		testsupport.NewInMemoryTaskProvider(tasks...),
 		testsupport.NewPassthroughResolver(),
 		testsupport.NewSilentSummarizer(),
-		testsupport.NewNoopProgress(),
+		testsupport.NewRecordingProgress(),
 	)
-	query := domain.Query{Project: "ACME", Period: newPeriod(t)}
+	query := domain.Query{Project: "ACME", Period: wholeMay(t)}
 
 	// Act
 	report, err := service.Generate(context.Background(), query)

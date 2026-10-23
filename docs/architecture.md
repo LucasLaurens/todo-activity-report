@@ -63,8 +63,9 @@ l'infrastructure connaît l'application via des interfaces (ports).
 1. `cmd/todo-activity-report` parse les flags (`--date` ou `--from`/`--to` en
    `JJ/MM/AAAA`, `--user`), construit un `domain.Query`.
 2. `config.Load()` lit l'env et vérifie que `TRACKER` désigne un adapter enregistré.
-3. `config.NewTracker()` / `NewUserResolver()` / `NewSummarizer()` fabriquent les
-   adapters. Le tracker retourné est un `ports.Tracker` : il sert à la fois de
+3. `config.NewTracker()` / `NewSummarizer()` (ou `NewOfflineSummarizer()` avec
+   `--no-ai`) fabriquent les adapters ; `main` choisit le résolveur (le tracker,
+   ou `application.PassthroughResolver` avec `--no-resolve`). Le tracker retourné est un `ports.Tracker` : il sert à la fois de
    `TaskProvider` et de `UserResolver`, et valide lui-même ses identifiants.
 4. `ReportService.Generate()`, en émettant chaque étape via `ProgressReporter`
    (un `Spinner` sur stderr en mode terminal) :
