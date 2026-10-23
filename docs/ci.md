@@ -43,7 +43,11 @@ Le job `release` ne tourne que sur un tag `v*` et seulement après un `quality`
 vert (`needs: quality`).
 
 Un seul job compile les 4 cibles : le module est en **pur Go** (stdlib, aucun
-cgo), donc la compilation croisée ne demande aucun toolchain C.
+cgo), donc la compilation croisée ne demande aucun toolchain C. Le build force
+`CGO_ENABLED=0` sur chaque cible : le runner est en linux/amd64, et un build natif
+y activerait cgo, ce qui lierait ce binaire-là à la libc du runner (c'était le cas
+jusqu'à la v1.2.0). `internal/architecture/toolchain_test.go` échoue si le flag
+disparaît du workflow.
 
 | Artifact | Plateforme |
 |----------|------------|
@@ -84,8 +88,8 @@ done
 gh release create "$TAG" --target main --title "todo-activity-report $TAG" dist/*
 ```
 
-`CGO_ENABLED=0` reproduit la cross-compilation de la CI : un build natif sur
-macOS activerait cgo.
+`CGO_ENABLED=0` reproduit le job : un build natif (macOS en local, linux/amd64
+sur le runner) activerait cgo.
 
 ## Sécurité du pipeline
 
