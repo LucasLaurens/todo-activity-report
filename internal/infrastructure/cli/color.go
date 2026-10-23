@@ -44,15 +44,16 @@ func colorEnabled(out io.Writer) bool {
 		return false
 	}
 	file, ok := out.(*os.File)
-	if !ok {
-		return false
-	}
+	return ok && IsTerminal(file)
+}
+
+// IsTerminal reports whether file is a character device (a terminal) rather
+// than a pipe or a regular file.
+func IsTerminal(file *os.File) bool {
 	info, err := file.Stat()
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// paintByStatus colors a status name, or a whole already-aligned line carrying
-// one: escape codes must land outside tabwriter, which counts them as width.
 // withTaskColor returns a renderer that colors every line it prints with the
 // color of the ticket, blocking comments included.
 func (r Renderer) withTaskColor(task domain.Task) Renderer {
@@ -95,14 +96,14 @@ func (r Renderer) paintNarrativeLine(line string, colors map[string]string) stri
 	}
 	color, known := colors[key]
 	if !known {
-		return r.paintByStatus(0, line)
+		return r.paintByStatus(line)
 	}
 	return r.paintWith(line, color)
 }
 
 // paintByStatus colours a line that contains a status name (the "Avancement"
 // rows, an AI line with no known ticket) by the keywords it carries.
-func (r Renderer) paintByStatus(_ int, text string) string {
+func (r Renderer) paintByStatus(text string) string {
 	return r.paintWith(text, statusColor(text))
 }
 

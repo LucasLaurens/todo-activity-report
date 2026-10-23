@@ -26,13 +26,16 @@ func TestStatusColorFollowsTheDomainClassification(t *testing.T) {
 	}
 
 	for status, expected := range cases {
-		// Act
-		color := statusColor(status)
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			// Act
+			color := statusColor(status)
 
-		// Assert
-		if color != expected {
-			t.Fatalf("statusColor(%q) = %q, want %q", status, color, expected)
-		}
+			// Assert
+			if color != expected {
+				t.Errorf("statusColor(%q) = %q, want %q", status, color, expected)
+			}
+		})
 	}
 }
 
@@ -42,7 +45,7 @@ func TestPaintStatusStaysPlainWithoutColor(t *testing.T) {
 	renderer := Renderer{color: false}
 
 	// Act
-	painted := renderer.paintByStatus(0, "Bloqué")
+	painted := renderer.paintByStatus("Bloqué")
 
 	// Assert
 	if painted != "Bloqué" {
