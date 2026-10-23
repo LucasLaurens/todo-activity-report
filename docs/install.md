@@ -33,22 +33,20 @@ Il ne réclame que deux choses :
 | `SHA256SUMS` | empreintes des 4 binaires |
 
 Chaque tag pousse ces fichiers dans une **Release GitHub** (voir [ci.md](ci.md#build--release-sur-tag)).
-Dernière release : **v1.3.1** — liste complète via
-`gh release list --repo LucasLaurens/todo-activity-report`.
+Dernière release : **v1.3.1** — liste complète sur
+[la page des Releases](https://github.com/LucasLaurens/todo-activity-report/releases).
 
 ### Télécharger et installer
 
-Le dépôt est **privé** : le téléchargement demande une authentification GitHub.
-Le plus simple est `gh`, qui réutilise la session existante — inutile de
-manipuler un token à la main :
+Le dépôt est public : aucune authentification, `curl` suffit.
 
 ```bash
 TAG=v1.3.1                    # tag visé
 TARGET=darwin-arm64           # ou darwin-amd64, linux-amd64, linux-arm64
 
 # 1. binaire + empreintes, sous leur nom de publication
-gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
-  --pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS
+BASE="https://github.com/LucasLaurens/todo-activity-report/releases/download/$TAG"
+curl -fsSLO "$BASE/todo-activity-report-$TARGET" -O "$BASE/SHA256SUMS"
 
 # 2. vérifier AVANT de renommer (voir plus bas)
 shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS
@@ -68,14 +66,12 @@ chmod 600 ~/bin/.env
 
 Installation minimale = **2 fichiers** : le binaire (~6 Mo) et le `.env`.
 
-Depuis un navigateur, la page des Releases fait la même chose en un clic — la
-session GitHub suffit.
+Depuis un navigateur, la page des Releases fait la même chose en un clic. Avec
+`gh` déjà installé, `gh release download "$TAG" --repo LucasLaurens/todo-activity-report
+--pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS` revient au même.
 
-> Sur un dépôt privé, l'URL directe
-> `https://github.com/<org>/<dépôt>/releases/download/<tag>/<nom>` répond **404**
-> sans authentification. C'est une vraie erreur : `curl -f` s'arrête et
-> n'écrit rien. Le risque n'est donc pas un faux fichier, c'est une commande qui
-> ne marche pas — d'où `gh release download`, qui porte la session.
+`curl -f` échoue sur une erreur HTTP (tag ou cible mal orthographiés) au lieu
+d'écrire la page d'erreur à la place du binaire.
 
 ### Vérifier l'empreinte (recommandé)
 
@@ -162,10 +158,10 @@ Ajouter `-X main.version=<tag>` pour que `--version` annonce autre chose que `de
 Remplacer le binaire, le `.env` reste en place :
 
 ```bash
-TAG=v1.1.0                    # tag visé
+TAG=v1.3.1                    # tag visé
 TARGET=darwin-arm64
-gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
-  --pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS
+BASE="https://github.com/LucasLaurens/todo-activity-report/releases/download/$TAG"
+curl -fsSLO "$BASE/todo-activity-report-$TARGET" -O "$BASE/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS --ignore-missing
 install -m 755 "todo-activity-report-$TARGET" ~/bin/todo-activity-report
 ~/bin/todo-activity-report --version          # confirme le tag installé

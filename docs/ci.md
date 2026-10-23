@@ -70,7 +70,7 @@ git push origin v1.0.0
 Aucun secret à configurer : le `GITHUB_TOKEN` fourni au workflow suffit à
 créer la Release.
 
-Sans CI disponible (cas des v1.3.0 et v1.3.1, Actions bloquées par la facturation), on
+Si la CI est indisponible (ce fut le cas des v1.3.0 et v1.3.1, quand Actions était bloqué), on
 reproduit le job à la main, puis on publie avec `gh` :
 
 ```bash
