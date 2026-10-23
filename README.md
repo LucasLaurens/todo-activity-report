@@ -26,15 +26,14 @@ directement depuis le tracker (Jira fourni).
 
 ### Binaire (recommandé)
 
-Prérequis : un accès au dépôt (il est **privé**, demander l'accès à son
-propriétaire) et la CLI [`gh`](https://cli.github.com) connectée (`gh auth login`).
+Aucun prérequis : le dépôt est public, `curl` suffit.
 
 ```bash
 TAG=v1.3.1
 TARGET=darwin-arm64     # darwin-amd64 (Mac Intel), linux-amd64, linux-arm64
 
-gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
-  --pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS
+BASE="https://github.com/LucasLaurens/todo-activity-report/releases/download/$TAG"
+curl -fsSLO "$BASE/todo-activity-report-$TARGET" -O "$BASE/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS --ignore-missing      # Linux : sha256sum -c …
 mkdir -p ~/bin
 install -m 755 "todo-activity-report-$TARGET" ~/bin/todo-activity-report
@@ -175,10 +174,10 @@ Un autre tracker apporte ses propres variables — voir [docs/trackers.md](docs/
 
 ### Autour du dépôt, pas dans `.env`
 
-Le dépôt est privé, donc cloner et télécharger une Release demandent une
-authentification GitHub. Elle est déléguée à `gh` (`gh auth login`), qui garde le
-jeton dans le trousseau du système : **aucun token à écrire dans un fichier**, et
-le CLI n'en lit jamais. Le `git push` en SSH n'en a pas besoin non plus.
+Le dépôt est public : cloner et télécharger une Release ne demandent aucune
+authentification. Seul le mainteneur qui pousse ou publie s'authentifie, via
+`gh auth login` ou SSH, qui gardent le jeton hors des fichiers : **aucun token à
+écrire nulle part**, et le CLI n'en lit jamais.
 
 ### Sentry
 

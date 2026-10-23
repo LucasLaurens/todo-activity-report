@@ -86,11 +86,11 @@ Aucune dépendance Go tierce : stdlib uniquement.
 - [ ] Sortie terminal uniquement (pas de JSON/CSV export).
 - [ ] Ne plus installer la **v1.2.0** : compilée en Go 1.22.12, elle embarque 63 vulnérabilités
   stdlib connues (`govulncheck -mode=binary`). Les **v1.3.0** et **v1.3.1** (go1.26.10) n'en ont aucune ; la v1.3.1 ajoute les durcissements de faible gravité.
-- [ ] CI GitHub Actions bloquée par la facturation du compte : les v1.3.0 et v1.3.1 ont été compilées en
-  local avec les commandes exactes du job `release` (voir [ci.md](ci.md#publier-une-version)).
-- [ ] Pas de Homebrew tap / installeur : le binaire se télécharge à la main depuis la Release.
-  Le dépôt étant privé, le téléchargement passe par `gh release download`, qui porte la
-  session GitHub ; l'URL directe répond 404 sans authentification — voir [install.md](install.md).
+- [ ] Les binaires v1.3.0 et v1.3.1 ont été compilés en local (Actions alors bloquées par la
+  facturation), avec les commandes exactes du job `release`. Depuis le passage du dépôt en
+  public, la CI tourne sur Actions ; le job `release` reste à voir tourner au prochain tag.
+- [ ] Pas de Homebrew tap / installeur : le binaire se télécharge à la main depuis la Release
+  (`curl`, sans authentification : le dépôt est public) — voir [install.md](install.md).
 
 ## Modèle IA par défaut
 
