@@ -53,12 +53,22 @@ func recentComments(comments []domain.Comment) []domain.Comment {
 // re-computes them. The translator sets the response language.
 func buildPrompt(report domain.Report, t i18n.Translator) string {
 	var b strings.Builder
-
 	language := t.T("prompt_language")
+
 	b.WriteString(language + " ")
+	writeInstructions(&b)
+	writeMetrics(&b, report)
+	writeTickets(&b, report.Tasks)
+	// Said again last: behind a long ticket list, the opening directive is far
+	// from where the model starts answering.
+	b.WriteString("\n" + language)
+	return b.String()
+}
+
+func writeInstructions(b *strings.Builder) {
 	b.WriteString("You are an engineering delivery analyst. Produce a briefing the engineer can read ALOUD as a spoken recap.\n")
 	b.WriteString("Structure it in two parts:\n")
-	fmt.Fprintf(&b, "1. %d sentences of overview at most: volume, time spent, status mix and the main risk.\n", maxOverviewSentences)
+	fmt.Fprintf(b, "1. %d sentences of overview at most: volume, time spent, status mix and the main risk.\n", maxOverviewSentences)
 	b.WriteString("2. Then give a progress recap for EVERY ticket — one line each, starting with the ticket key. ")
 	b.WriteString("KEEP THE TICKET ORDER GIVEN BELOW: it already reads blockers first, then work in flight, then what shipped, ")
 	b.WriteString("then what is not started, then what was abandoned. Do not reorder, do not re-group. ")
@@ -68,7 +78,7 @@ func buildPrompt(report domain.Report, t i18n.Translator) string {
 	b.WriteString("   - Tickets still open (in progress, blocked, in code review, in release): state what was advanced and any blocker or next step. ")
 	b.WriteString("When no root cause, fix or comment is recorded, still write a progress line inferred from the ticket summary, status and time logged ")
 	b.WriteString("(e.g. work underway, awaiting review, blocked, pending release).\n")
-	fmt.Fprintf(&b, "Length budget, and it is hard: %d words maximum per ticket line, one single line each, no sub-bullets, "+
+	fmt.Fprintf(b, "Length budget, and it is hard: %d words maximum per ticket line, one single line each, no sub-bullets, "+
 		"no blank line between them, no preamble, no closing sentence, no markdown, no heading. Be terse: drop filler, keep the fact.\n",
 		maxWordsPerTicketLine)
 	b.WriteString("The ticket list may end with \"... and N more\": those tickets are out of scope, ignore them silently — ")
@@ -76,39 +86,41 @@ func buildPrompt(report domain.Report, t i18n.Translator) string {
 	b.WriteString("Each ticket may list recent comments. Use them as supporting detail to make the recap precise and accurate — ")
 	b.WriteString("fold the relevant fact into that ticket's line. Do not quote comments verbatim, do not list them, and do not invent ")
 	b.WriteString("anything not present in the data below.\n\n")
+}
 
+func writeMetrics(b *strings.Builder, report domain.Report) {
 	metrics := report.Metrics
-	fmt.Fprintf(&b, "Project: %s\n", report.Project)
-	fmt.Fprintf(&b, "Period: %s to %s\n", report.Period.FromString(), report.Period.ToString())
-	fmt.Fprintf(&b, "Total tickets: %d (resolved %d)\n", metrics.TotalTasks, metrics.ResolvedTasks)
-	fmt.Fprintf(&b, "Time logged as assignee: %s, average %s per ticket\n", metrics.TotalTimeSpent, metrics.AvgTimeSpent)
+	fmt.Fprintf(b, "Project: %s\n", report.Project)
+	fmt.Fprintf(b, "Period: %s to %s\n", report.Period.FromString(), report.Period.ToString())
+	fmt.Fprintf(b, "Total tickets: %d (resolved %d)\n", metrics.TotalTasks, metrics.ResolvedTasks)
+	fmt.Fprintf(b, "Time logged as assignee: %s, average %s per ticket\n", metrics.TotalTimeSpent, metrics.AvgTimeSpent)
+	writeLabelCounts(b, "Status breakdown", metrics.ByStatus)
+	writeLabelCounts(b, "Top root causes", metrics.TopRootCauses)
+}
 
-	if len(metrics.ByStatus) > 0 {
-		b.WriteString("Status breakdown:\n")
-		for _, status := range metrics.ByStatus {
-			fmt.Fprintf(&b, "  - %s (%d)\n", status.Label, status.Count)
-		}
+func writeLabelCounts(b *strings.Builder, title string, counts []domain.LabelCount) {
+	if len(counts) == 0 {
+		return
 	}
-	if len(metrics.TopRootCauses) > 0 {
-		b.WriteString("Top root causes:\n")
-		for _, cause := range metrics.TopRootCauses {
-			fmt.Fprintf(&b, "  - %s (%d)\n", cause.Label, cause.Count)
-		}
+	b.WriteString(title + ":\n")
+	for _, entry := range counts {
+		fmt.Fprintf(b, "  - %s (%d)\n", entry.Label, entry.Count)
 	}
+}
 
+// writeTickets lists at most maxTasksInPrompt tickets with their recent
+// comments. O(n) time over the listed tickets.
+func writeTickets(b *strings.Builder, tasks []domain.Task) {
 	b.WriteString("\nTickets:\n")
-	for index, task := range report.Tasks {
+	for index, task := range tasks {
 		if index >= maxTasksInPrompt {
-			fmt.Fprintf(&b, "  ... and %d more\n", len(report.Tasks)-maxTasksInPrompt)
-			break
+			fmt.Fprintf(b, "  ... and %d more\n", len(tasks)-maxTasksInPrompt)
+			return
 		}
-		fmt.Fprintf(&b, "  - [%s] %s | status=%s | assignee=%s | time=%s | root cause=%q | fix=%q\n",
+		fmt.Fprintf(b, "  - [%s] %s | status=%s | assignee=%s | time=%s | root cause=%q | fix=%q\n",
 			task.Key, task.Summary, task.Status, task.Assignee, task.TimeSpent, task.RootCause, task.Correction)
 		for _, comment := range recentComments(task.Comments) {
-			fmt.Fprintf(&b, "      comment by %s: %s\n", comment.Author, oneLine(comment.Body))
+			fmt.Fprintf(b, "      comment by %s: %s\n", comment.Author, oneLine(comment.Body))
 		}
 	}
-
-	b.WriteString("\n" + language)
-	return b.String()
 }

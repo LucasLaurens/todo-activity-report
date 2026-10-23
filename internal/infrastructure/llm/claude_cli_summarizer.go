@@ -12,7 +12,6 @@ import (
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
-	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
@@ -86,9 +85,5 @@ func (s ClaudeCLISummarizer) Summarize(ctx context.Context, report domain.Report
 		return domain.None[string](), fmt.Errorf("claude cli: %w: %s", err, strings.TrimSpace(stderr.String()))
 	}
 
-	narrative := strings.TrimSpace(sanitize.Printable(stdout.String()))
-	if narrative == "" {
-		return domain.None[string](), nil
-	}
-	return domain.Some(narrative), nil
+	return toNarrative(stdout.String()), nil
 }

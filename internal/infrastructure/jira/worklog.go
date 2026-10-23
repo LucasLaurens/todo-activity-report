@@ -2,13 +2,14 @@ package jira
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"net/url"
 	"strconv"
-	"strings"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 )
+
+const worklogPathFormat = "/rest/api/3/issue/%s/worklog"
 
 type worklogResponse struct {
 	Total    int            `json:"total"`
@@ -36,15 +37,11 @@ func (c *Client) periodTimeSpent(ctx context.Context, key string, period domain.
 		if err != nil {
 			return 0, err
 		}
-		for _, entry := range page.Worklogs {
-			if len(authors) > 0 && !authors[entry.Author.AccountID] {
-				continue
-			}
-			if !period.Contains(parseTime(entry.Started)) {
-				continue
-			}
-			total += entry.TimeSpentSeconds
+		seconds, err := sumWorklogsInPeriod(page.Worklogs, period, authors)
+		if err != nil {
+			return 0, err
 		}
+		total += seconds
 		startAt += len(page.Worklogs)
 		if len(page.Worklogs) == 0 || startAt >= page.Total {
 			break
@@ -53,34 +50,33 @@ func (c *Client) periodTimeSpent(ctx context.Context, key string, period domain.
 	return total, nil
 }
 
-func (c *Client) fetchWorklogPage(ctx context.Context, key string, startAt int) (worklogResponse, error) {
-	endpoint, err := c.worklogURL(key, startAt)
-	if err != nil {
-		return worklogResponse{}, err
+// sumWorklogsInPeriod totals the entries logged within the period by the given
+// authors (every author when the set is empty). O(n) time, O(1) space.
+func sumWorklogsInPeriod(entries []worklogEntry, period domain.DateRange, authors map[string]bool) (int, error) {
+	total := 0
+	for _, entry := range entries {
+		if len(authors) > 0 && !authors[entry.Author.AccountID] {
+			continue
+		}
+		started, err := parseTime(entry.Started)
+		if err != nil {
+			return 0, fmt.Errorf("worklog started: %w", err)
+		}
+		if period.Contains(started) {
+			total += entry.TimeSpentSeconds
+		}
 	}
-	body, err := c.get(ctx, endpoint)
-	if err != nil {
-		return worklogResponse{}, err
-	}
-	var decoded worklogResponse
-	if err := json.Unmarshal(body, &decoded); err != nil {
-		return worklogResponse{}, err
-	}
-	return decoded, nil
+	return total, nil
 }
 
-func (c *Client) worklogURL(key string, startAt int) (string, error) {
-	base, err := url.Parse(c.config.BaseURL)
-	if err != nil {
-		return "", err
-	}
-	base.Path = strings.TrimRight(base.Path, "/") + "/rest/api/3/issue/" + url.PathEscape(key) + "/worklog"
-
+func (c *Client) fetchWorklogPage(ctx context.Context, key string, startAt int) (worklogResponse, error) {
 	params := url.Values{}
 	params.Set("startAt", strconv.Itoa(startAt))
-	base.RawQuery = params.Encode()
-
-	return base.String(), nil
+	endpoint, err := c.endpoint(fmt.Sprintf(worklogPathFormat, url.PathEscape(key)), params)
+	if err != nil {
+		return worklogResponse{}, err
+	}
+	return getJSON[worklogResponse](ctx, c, endpoint)
 }
 
 func authorSet(accountIDs []string) map[string]bool {

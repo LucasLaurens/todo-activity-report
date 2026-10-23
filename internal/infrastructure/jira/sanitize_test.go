@@ -4,9 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
@@ -40,21 +37,9 @@ func TestFetchTasksStripsTerminalEscapesComingFromTheTracker(t *testing.T) {
 		jsonString(t, bell+"Config drift"),
 		jsonString(t, escape+"[2Kspoof"),
 	)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/worklog") {
-			w.Write([]byte(`{"startAt":0,"total":0,"worklogs":[]}`))
-			return
-		}
-		w.Write([]byte(search))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{
-		BaseURL:        server.URL,
-		Email:          "bot@example.com",
-		APIToken:       "token",
+	client := newTestClientWithFields(t, routeSearchAndWorklog(search, emptyWorklogPayload), jira.Config{
 		RootCauseField: "customfield_100",
-	}, server.Client())
+	})
 
 	// Act
 	tasks, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
