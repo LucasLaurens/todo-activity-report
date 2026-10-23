@@ -84,9 +84,10 @@ Aucune dépendance Go tierce : stdlib uniquement.
 - [ ] Un seul adapter de tracker livré (`jira`) : le port et le registre existent, les autres restent à écrire.
 - [ ] Pas de cache des réponses du tracker (chaque run rappelle l'API).
 - [ ] Sortie terminal uniquement (pas de JSON/CSV export).
-- [ ] Release **v1.2.0 vulnérable** : compilée en Go 1.22.12, elle embarque 63 vulnérabilités
-  stdlib connues (`govulncheck -mode=binary`). Le code est corrigé (toolchain
-  `go1.26.10`), il faut publier un nouveau tag pour livrer des binaires sains.
+- [ ] Ne plus installer la **v1.2.0** : compilée en Go 1.22.12, elle embarque 63 vulnérabilités
+  stdlib connues (`govulncheck -mode=binary`). La **v1.3.0** (go1.26.10) n'en a aucune.
+- [ ] CI GitHub Actions bloquée par la facturation du compte : la v1.3.0 a été compilée en
+  local avec les commandes exactes du job `release` (voir [ci.md](ci.md#publier-une-version)).
 - [ ] Durcissements sécurité restants, faible gravité (serveurs de confiance requis) :
   corps d'erreur Jira/Anthropic et stderr du CLI `claude` affichés sans `sanitize.Printable` ;
   `sanitize.Printable` laisse passer les contrôles C1 (U+0080–U+009F) et les marques bidi ;
