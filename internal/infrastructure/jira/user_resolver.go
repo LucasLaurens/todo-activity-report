@@ -2,7 +2,6 @@ package jira
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -21,38 +20,22 @@ func (c *Client) Resolve(ctx context.Context, term string) (string, error) {
 		return term, nil
 	}
 
-	endpoint, err := c.userSearchURL(term)
-	if err != nil {
-		return "", err
-	}
-	body, err := c.get(ctx, endpoint)
+	params := url.Values{}
+	params.Set("query", term)
+	params.Set("maxResults", "1")
+	endpoint, err := c.endpoint(userSearchPath, params)
 	if err != nil {
 		return "", err
 	}
 
-	var users []userDTO
-	if err := json.Unmarshal(body, &users); err != nil {
+	users, err := getJSON[[]userDTO](ctx, c, endpoint)
+	if err != nil {
 		return "", err
 	}
 	if len(users) == 0 {
 		return "", fmt.Errorf("no Jira user matches %q", term)
 	}
 	return users[0].AccountID, nil
-}
-
-func (c *Client) userSearchURL(term string) (string, error) {
-	base, err := url.Parse(c.config.BaseURL)
-	if err != nil {
-		return "", err
-	}
-	base.Path = strings.TrimRight(base.Path, "/") + userSearchPath
-
-	params := url.Values{}
-	params.Set("query", term)
-	params.Set("maxResults", "1")
-	base.RawQuery = params.Encode()
-
-	return base.String(), nil
 }
 
 // looksLikeAccountID matches Jira Cloud accountIds: the GDPR form

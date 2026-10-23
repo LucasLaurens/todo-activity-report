@@ -2,7 +2,10 @@ package domain
 
 import "fmt"
 
-const secondsPerHour = 3600
+const (
+	secondsPerMinute = 60
+	secondsPerHour   = 60 * secondsPerMinute
+)
 
 // TimeSpent is an immutable value object holding a non-negative duration in seconds.
 type TimeSpent struct {
@@ -18,6 +21,11 @@ func NewTimeSpent(seconds int) TimeSpent {
 
 func (t TimeSpent) Seconds() int {
 	return t.seconds
+}
+
+// IsZero reports whether no time was logged.
+func (t TimeSpent) IsZero() bool {
+	return t.seconds == 0
 }
 
 func (t TimeSpent) Hours() float64 {
@@ -46,7 +54,7 @@ func (t TimeSpent) ShareOf(total TimeSpent) float64 {
 
 func (t TimeSpent) String() string {
 	hours := t.seconds / secondsPerHour
-	minutes := (t.seconds % secondsPerHour) / 60
+	minutes := (t.seconds % secondsPerHour) / secondsPerMinute
 	if hours == 0 {
 		return fmt.Sprintf("%dm", minutes)
 	}

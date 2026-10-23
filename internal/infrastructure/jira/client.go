@@ -122,17 +122,30 @@ func (c *Client) enrichWithPeriodTime(ctx context.Context, tasks []domain.Task, 
 }
 
 func (c *Client) fetchPage(ctx context.Context, jql, pageToken string) (searchResponse, error) {
-	endpoint, err := c.searchURL(jql, pageToken)
+	params := url.Values{}
+	params.Set("jql", jql)
+	params.Set("maxResults", strconv.Itoa(pageSize))
+	params.Set(fieldsParam, c.fields)
+	if pageToken != "" {
+		params.Set("nextPageToken", pageToken)
+	}
+	endpoint, err := c.endpoint(searchPath, params)
 	if err != nil {
 		return searchResponse{}, err
 	}
+	return getJSON[searchResponse](ctx, c, endpoint)
+}
+
+// getJSON performs an authenticated GET and decodes the JSON body into T.
+// A method cannot carry a type parameter, hence the client as an argument.
+func getJSON[T any](ctx context.Context, c *Client, endpoint string) (T, error) {
+	var decoded T
 	body, err := c.get(ctx, endpoint)
 	if err != nil {
-		return searchResponse{}, err
+		return decoded, err
 	}
-	var decoded searchResponse
 	if err := json.Unmarshal(body, &decoded); err != nil {
-		return searchResponse{}, err
+		return decoded, fmt.Errorf("decode Jira response: %w", err)
 	}
 	return decoded, nil
 }
@@ -162,22 +175,15 @@ func (c *Client) get(ctx context.Context, endpoint string) ([]byte, error) {
 	return body, nil
 }
 
-func (c *Client) searchURL(jql, pageToken string) (string, error) {
+// endpoint joins an API path to the configured base URL, keeping any path
+// prefix the base carries (a Jira behind a reverse proxy).
+func (c *Client) endpoint(path string, params url.Values) (string, error) {
 	base, err := url.Parse(c.config.BaseURL)
 	if err != nil {
 		return "", err
 	}
-	base.Path = strings.TrimRight(base.Path, "/") + searchPath
-
-	params := url.Values{}
-	params.Set("jql", jql)
-	params.Set("maxResults", strconv.Itoa(pageSize))
-	params.Set(fieldsParam, c.fields)
-	if pageToken != "" {
-		params.Set("nextPageToken", pageToken)
-	}
+	base.Path = strings.TrimRight(base.Path, "/") + path
 	base.RawQuery = params.Encode()
-
 	return base.String(), nil
 }
 

@@ -59,11 +59,15 @@ func buildLinearTracker() (ports.Tracker, error) {
 ```go
 const TrackerLinear TrackerName = "linear"
 
-var trackerBuilders = map[TrackerName]trackerBuilder{
-    TrackerJira:   buildJiraTracker,
-    TrackerLinear: buildLinearTracker,
+var trackerRegistry = map[TrackerName]trackerEntry{
+    TrackerJira:   {build: buildJiraTracker, defaultUserEnv: jiraEmailEnv},
+    TrackerLinear: {build: buildLinearTracker, defaultUserEnv: "LINEAR_EMAIL"},
 }
 ```
+
+`defaultUserEnv` nomme la variable du compte connecté : la personne ciblée
+quand ni `--user` ni `TRACKER_USER` ne sont fournis. Vide si l'outil n'en a
+pas — le rapport couvre alors tout le board.
 
 C'est tout. `TRACKER=linear` dans `.env` suffit à basculer. Aucun `switch` à
 rallonger ailleurs, aucun fichier du domaine ou de l'application à rouvrir

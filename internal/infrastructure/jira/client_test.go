@@ -47,25 +47,45 @@ const worklogPayload = `{
   ]
 }`
 
+const emptyWorklogPayload = `{"startAt":0,"total":0,"worklogs":[]}`
+
+// newTestClient points a Jira client at handler, served over httptest.
+func newTestClient(t *testing.T, handler http.HandlerFunc) *jira.Client {
+	t.Helper()
+	return newTestClientWithFields(t, handler, jira.Config{})
+}
+
+// newTestClientWithFields is newTestClient for a config naming custom fields;
+// the helper fills the URL and the credentials.
+func newTestClientWithFields(t *testing.T, handler http.HandlerFunc, config jira.Config) *jira.Client {
+	t.Helper()
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+	config.BaseURL = server.URL
+	config.Email = "bot@example.com"
+	config.APIToken = "token"
+	return jira.NewClient(config, server.Client())
+}
+
+// routeSearchAndWorklog answers worklog requests with worklog and every other
+// request (the search) with search.
+func routeSearchAndWorklog(search, worklog string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/worklog") {
+			w.Write([]byte(worklog))
+			return
+		}
+		w.Write([]byte(search))
+	}
+}
+
 func TestFetchTasksMapsIssueIncludingCustomFields(t *testing.T) {
 	t.Parallel()
 	// Arrange
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/worklog") {
-			w.Write([]byte(worklogPayload))
-			return
-		}
-		w.Write([]byte(singlePagePayload))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{
-		BaseURL:         server.URL,
-		Email:           "bot@example.com",
-		APIToken:        "token",
+	client := newTestClientWithFields(t, routeSearchAndWorklog(singlePagePayload, worklogPayload), jira.Config{
 		RootCauseField:  "customfield_100",
 		CorrectionField: "customfield_200",
-	}, server.Client())
+	})
 
 	// Act
 	tasks, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
@@ -102,16 +122,7 @@ func TestFetchTasksMapsRecentCommentsFromADF(t *testing.T) {
 	}
 	search := fmt.Sprintf(`{"issues":[{"key":"HT-7","fields":{"summary":"a","status":{"name":"En cours"},"issuetype":{"name":"Bug"},"created":"2026-05-01T09:00:00.000+0000","comment":{"comments":[%s]}}}]}`,
 		strings.Join(commentEntries, ","))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/worklog") {
-			w.Write([]byte(`{"startAt":0,"total":0,"worklogs":[]}`))
-			return
-		}
-		w.Write([]byte(search))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	client := newTestClient(t, routeSearchAndWorklog(search, emptyWorklogPayload))
 
 	// Act
 	tasks, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
@@ -136,13 +147,10 @@ func TestFetchTasksRequestsCommentField(t *testing.T) {
 	t.Parallel()
 	// Arrange
 	var capturedFields string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		capturedFields = r.URL.Query().Get("fields")
 		w.Write([]byte(`{"issues":[]}`))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	_, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
@@ -165,16 +173,7 @@ func TestFetchTasksCountsOnlyInPeriodWorklogOfTargetedAuthor(t *testing.T) {
 		{"started":"2026-05-10T11:00:00.000+0000","timeSpentSeconds":1800,"author":{"accountId":"u2"}},
 		{"started":"2026-04-30T10:00:00.000+0000","timeSpentSeconds":7200,"author":{"accountId":"u1"}}
 	]}`
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.Contains(r.URL.Path, "/worklog") {
-			w.Write([]byte(worklog))
-			return
-		}
-		w.Write([]byte(search))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	client := newTestClient(t, routeSearchAndWorklog(search, worklog))
 	query := domain.Query{Project: "ACME", Assignees: []string{"u1"}, Period: newPeriod(t)}
 
 	// Act
@@ -194,14 +193,11 @@ func TestFetchTasksSendsScopedJQLWithBasicAuth(t *testing.T) {
 	// Arrange
 	var capturedJQL string
 	var capturedAuth string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		capturedJQL = r.URL.Query().Get("jql")
 		capturedAuth = r.Header.Get("Authorization")
 		w.Write([]byte(`{"startAt":0,"maxResults":100,"total":0,"issues":[]}`))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 	query := domain.Query{Project: "ACME", Assignees: []string{"Ada"}, Period: newPeriod(t)}
 
 	// Act
@@ -232,16 +228,13 @@ func TestFetchTasksPaginatesUntilTokenExhausted(t *testing.T) {
 	// Arrange
 	firstPage := `{"nextPageToken":"page2","issues":[{"key":"HT-1","fields":{"summary":"a","status":{"name":"Done"},"issuetype":{"name":"Bug"},"created":"2026-05-01T09:00:00.000+0000"}}]}`
 	secondPage := `{"issues":[{"key":"HT-2","fields":{"summary":"b","status":{"name":"Done"},"issuetype":{"name":"Bug"},"created":"2026-05-02T09:00:00.000+0000"}}]}`
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("nextPageToken") == "" {
 			w.Write([]byte(firstPage))
 			return
 		}
 		w.Write([]byte(secondPage))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	tasks, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
@@ -259,13 +252,10 @@ func TestResolveTurnsNameIntoAccountID(t *testing.T) {
 	t.Parallel()
 	// Arrange
 	var capturedQuery string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		capturedQuery = r.URL.Query().Get("query")
 		w.Write([]byte(`[{"accountId":"712020:cde","displayName":"Ada Lovelace"}]`))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	accountID, err := client.Resolve(context.Background(), "Ada Lovelace")
@@ -285,12 +275,9 @@ func TestResolveTurnsNameIntoAccountID(t *testing.T) {
 func TestResolveReturnsAccountIDTermUnchanged(t *testing.T) {
 	t.Parallel()
 	// Arrange — server would fail the test if hit, since accountIds skip search.
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		t.Error("user search must not be called for an accountId term")
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	accountID, err := client.Resolve(context.Background(), "712020:cde38829-9472-43d0-b093-929aeb17988d")
@@ -307,12 +294,9 @@ func TestResolveReturnsAccountIDTermUnchanged(t *testing.T) {
 func TestResolveErrorsWhenNoUserMatches(t *testing.T) {
 	t.Parallel()
 	// Arrange
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(`[]`))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	_, err := client.Resolve(context.Background(), "Nobody")
@@ -327,16 +311,13 @@ func TestFetchTasksPropagatesWorklogError(t *testing.T) {
 	t.Parallel()
 	// Arrange — search succeeds, worklog fails.
 	search := `{"issues":[{"key":"HT-1","fields":{"summary":"a","status":{"name":"Done"},"issuetype":{"name":"Bug"},"created":"2026-05-01T09:00:00.000+0000"}}]}`
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/worklog") {
 			http.Error(w, "boom", http.StatusInternalServerError)
 			return
 		}
 		w.Write([]byte(search))
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	_, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})
@@ -350,12 +331,9 @@ func TestFetchTasksPropagatesWorklogError(t *testing.T) {
 func TestFetchTasksReturnsErrorOnNon200(t *testing.T) {
 	t.Parallel()
 	// Arrange
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	client := newTestClient(t, func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "boom", http.StatusInternalServerError)
-	}))
-	defer server.Close()
-
-	client := jira.NewClient(jira.Config{BaseURL: server.URL, Email: "bot@example.com", APIToken: "token"}, server.Client())
+	})
 
 	// Act
 	_, err := client.FetchTasks(context.Background(), domain.Query{Project: "ACME", Period: newPeriod(t)})

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -26,13 +27,16 @@ func TestStatusColorFollowsTheDomainClassification(t *testing.T) {
 	}
 
 	for status, expected := range cases {
-		// Act
-		color := statusColor(status)
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			// Act
+			color := statusColor(status)
 
-		// Assert
-		if color != expected {
-			t.Fatalf("statusColor(%q) = %q, want %q", status, color, expected)
-		}
+			// Assert
+			if color != expected {
+				t.Errorf("statusColor(%q) = %q, want %q", status, color, expected)
+			}
+		})
 	}
 }
 
@@ -42,7 +46,7 @@ func TestPaintStatusStaysPlainWithoutColor(t *testing.T) {
 	renderer := Renderer{color: false}
 
 	// Act
-	painted := renderer.paintByStatus(0, "Bloqué")
+	painted := renderer.paintByStatus("Bloqué")
 
 	// Assert
 	if painted != "Bloqué" {
@@ -142,4 +146,23 @@ func stripANSI(line string) string {
 		line = strings.ReplaceAll(line, code, "")
 	}
 	return line
+}
+
+func TestIsTerminalFalseForPipe(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	// Act
+	terminal := IsTerminal(reader)
+
+	// Assert
+	if terminal {
+		t.Fatal("a pipe is not a terminal")
+	}
 }

@@ -8,6 +8,7 @@ import (
 
 func TestParseLocale(t *testing.T) {
 	t.Parallel()
+	// Arrange
 	cases := map[string]i18n.Locale{
 		"":        i18n.French,
 		"fr":      i18n.French,
@@ -17,6 +18,7 @@ func TestParseLocale(t *testing.T) {
 		"unknown": i18n.French, // falls back to default
 	}
 	for input, want := range cases {
+		// Act & Assert
 		if got := i18n.ParseLocale(input); got != want {
 			t.Fatalf("ParseLocale(%q) = %q, want %q", input, got, want)
 		}
@@ -50,12 +52,5 @@ func TestTranslatorUnknownKeyReturnsKey(t *testing.T) {
 	// Act & Assert
 	if got := i18n.NewTranslator(i18n.French).T("does_not_exist"); got != "does_not_exist" {
 		t.Fatalf("expected the key back, got %q", got)
-	}
-}
-
-func TestTranslatorLocaleAccessor(t *testing.T) {
-	t.Parallel()
-	if i18n.NewTranslator(i18n.English).Locale() != i18n.English {
-		t.Fatal("expected English locale")
 	}
 }

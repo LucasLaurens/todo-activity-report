@@ -21,29 +21,43 @@ const (
 	defaultTrackerName = TrackerJira
 )
 
-// trackerBuilder wires one concrete adapter and returns it behind the port. It
-// validates its own credentials, so this package holds no tool-specific rule.
-type trackerBuilder func() (ports.Tracker, error)
+// trackerEntry is everything this package knows about one tool. build wires
+// the adapter, which validates its own credentials; defaultUserEnv names the
+// variable holding the account the adapter signs in with, the person a bare
+// run reports on when TRACKER_USER is unset. No tool-specific rule leaks into
+// Load.
+type trackerEntry struct {
+	build          func() (ports.Tracker, error)
+	defaultUserEnv string
+}
 
-// trackerBuilders is the registry: supporting a new tool means adding one entry
-// here plus its adapter package. The domain and the use case stay untouched
-// (open/closed).
-var trackerBuilders = map[TrackerName]trackerBuilder{
-	TrackerJira: buildJiraTracker,
+// readDefaultUser returns the adapter's own account, empty when it has none.
+func (e trackerEntry) readDefaultUser() string {
+	if e.defaultUserEnv == "" {
+		return ""
+	}
+	return env(e.defaultUserEnv)
+}
+
+// trackerRegistry maps TRACKER to its entry: supporting a new tool means adding
+// one entry here plus its adapter package. The domain and the use case stay
+// untouched (open/closed).
+var trackerRegistry = map[TrackerName]trackerEntry{
+	TrackerJira: {build: buildJiraTracker, defaultUserEnv: jiraEmailEnv},
 }
 
 // NewTracker builds the configured adapter. Load already refused an unknown
 // name, so the only error here is the adapter's own diagnostic (missing
 // credentials, insecure URL), which the CLI prints as-is.
 func (c Config) NewTracker() (ports.Tracker, error) {
-	return trackerBuilders[c.tracker]()
+	return c.tracker.build()
 }
 
 // knownTrackers lists the registered names, sorted so the error message is
 // reproducible.
 func knownTrackers() []string {
-	names := make([]string, 0, len(trackerBuilders))
-	for name := range trackerBuilders {
+	names := make([]string, 0, len(trackerRegistry))
+	for name := range trackerRegistry {
 		names = append(names, string(name))
 	}
 	sort.Strings(names)
