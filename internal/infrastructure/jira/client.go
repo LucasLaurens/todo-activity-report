@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,12 +12,19 @@ import (
 	"sync"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
 	searchPath  = "/rest/api/3/search/jql"
 	pageSize    = 100
 	fieldsParam = "fields"
+	// maxSearchPages bounds a search at 100,000 issues, far beyond any day of
+	// work, so a server that never ends its pagination cannot loop us forever.
+	maxSearchPages = 1000
+	// maxResponseBytes bounds one response: a full page of issues with their
+	// comments weighs a few megabytes.
+	maxResponseBytes = 16 << 20
 )
 
 // Client is a Jira adapter implementing ports.TaskProvider and
@@ -50,7 +56,10 @@ func (c *Client) FetchTasks(ctx context.Context, query domain.Query) ([]domain.T
 	tasks := make([]domain.Task, 0)
 	pageToken := ""
 
-	for {
+	for pages := 1; ; pages++ {
+		if pages > maxSearchPages {
+			return nil, fmt.Errorf("jira search still paginating after %d pages", maxSearchPages)
+		}
 		page, err := c.fetchPage(ctx, jql, pageToken)
 		if err != nil {
 			return nil, err
@@ -64,6 +73,9 @@ func (c *Client) FetchTasks(ctx context.Context, query domain.Query) ([]domain.T
 		}
 		if page.NextPageToken == "" {
 			break
+		}
+		if page.NextPageToken == pageToken {
+			return nil, fmt.Errorf("jira repeated page token %q", pageToken)
 		}
 		pageToken = page.NextPageToken
 	}
@@ -165,12 +177,13 @@ func (c *Client) get(ctx context.Context, endpoint string) ([]byte, error) {
 	}
 	defer response.Body.Close()
 
-	body, err := io.ReadAll(response.Body)
+	body, err := sanitize.ReadAtMost(response.Body, maxResponseBytes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read Jira response: %w", err)
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("jira returned %d: %s", response.StatusCode, strings.TrimSpace(string(body)))
+		// The body ends up on the terminal, through the CLI's error message.
+		return nil, fmt.Errorf("jira returned %d: %s", response.StatusCode, strings.TrimSpace(sanitize.Printable(string(body))))
 	}
 	return body, nil
 }

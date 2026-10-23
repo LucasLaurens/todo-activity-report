@@ -12,6 +12,7 @@ import (
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
@@ -82,7 +83,7 @@ func (s ClaudeCLISummarizer) Summarize(ctx context.Context, report domain.Report
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return domain.None[string](), fmt.Errorf("claude cli timed out after %s (shorten the period or pass --no-ai)", s.timeout)
 		}
-		return domain.None[string](), fmt.Errorf("claude cli: %w: %s", err, strings.TrimSpace(stderr.String()))
+		return domain.None[string](), fmt.Errorf("claude cli: %w: %s", err, strings.TrimSpace(sanitize.Printable(stderr.String())))
 	}
 
 	return toNarrative(stdout.String()), nil

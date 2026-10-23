@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
@@ -117,5 +118,23 @@ func TestClaudeCLISummarizerRunsInAnEmptyWorkingDirectory(t *testing.T) {
 	}
 	if entries, _ := narrative.Get(); entries != "0" {
 		t.Fatalf("expected an empty working directory, found %s entries", entries)
+	}
+}
+
+func TestClaudeCLISummarizerStripsEscapesFromItsStderr(t *testing.T) {
+	t.Parallel()
+	// Arrange — the fail-safe prints this error on stderr.
+	binary := writeStubBinary(t, "#!/bin/sh\ncat >/dev/null\nprintf 'boom\\033[2J\\033]0;owned\\007' >&2\nexit 1\n")
+	summarizer := llm.NewClaudeCLISummarizer(binary, i18n.NewTranslator(i18n.French))
+
+	// Act
+	_, err := summarizer.Summarize(context.Background(), emptyReport(t))
+
+	// Assert
+	if err == nil {
+		t.Fatal("expected an error when the CLI exits non-zero")
+	}
+	if strings.ContainsRune(err.Error(), '\x1b') || strings.ContainsRune(err.Error(), '\a') {
+		t.Fatalf("escape sequences reached the error: %q", err)
 	}
 }

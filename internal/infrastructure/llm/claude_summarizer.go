@@ -5,12 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
+	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
@@ -20,6 +20,9 @@ const (
 	// otherwise. Declared here, next to the API client that sends it.
 	DefaultModel     = "claude-sonnet-4-6"
 	defaultMaxTokens = 1024
+	// maxResponseBytes bounds the answer: 1024 tokens of text weigh a few
+	// kilobytes, a megabyte leaves room for the JSON around them.
+	maxResponseBytes = 1 << 20
 )
 
 // ClaudeSummarizer asks the Anthropic Messages API for a narrative over the
@@ -100,12 +103,13 @@ func (s ClaudeSummarizer) postMessage(ctx context.Context, prompt string) ([]byt
 	}
 	defer response.Body.Close()
 
-	raw, err := io.ReadAll(response.Body)
+	raw, err := sanitize.ReadAtMost(response.Body, maxResponseBytes)
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("status %d: %s", response.StatusCode, strings.TrimSpace(string(raw)))
+		// The fail-safe prints this error on the terminal.
+		return nil, fmt.Errorf("status %d: %s", response.StatusCode, strings.TrimSpace(sanitize.Printable(string(raw))))
 	}
 	return raw, nil
 }

@@ -3,18 +3,14 @@ package config
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/LucasLaurens/todo-activity-report/internal/application/ports"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
 	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/llm"
 )
-
-const httpTimeout = 30 * time.Second
 
 // Config is the resolved application configuration. It is built once from the
 // environment (see Load) and then hands out wired adapters — the composition
@@ -88,7 +84,7 @@ func (c Config) selectNarrativeStrategy() ports.Summarizer {
 		return llm.NewClaudeCLISummarizer(path, translator)
 	}
 	if c.anthropic.enabled() {
-		return llm.NewClaudeSummarizer(c.anthropic.apiKey, c.anthropic.model, translator, &http.Client{Timeout: httpTimeout})
+		return llm.NewClaudeSummarizer(c.anthropic.apiKey, c.anthropic.model, translator, newHTTPClient())
 	}
 	return c.NewOfflineSummarizer()
 }
