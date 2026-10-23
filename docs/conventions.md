@@ -79,7 +79,14 @@ ils sont convertis en `Optional` dès le mapper Jira. Dépendances jamais nil :
   `https://` pour `JIRA_BASE_URL` (`jira.ErrInsecureBaseURL`), le token ne part
   jamais en clair. La règle vit avec l'adapter qui la subit, pas dans le
   composition root.
-- Clients HTTP avec timeout (30s) — pas de pendaison.
+- Clients HTTP construits par `config.newHTTPClient` : timeout (30s), et aucune
+  redirection suivie hors de `https` (sinon `net/http` renvoie l'en-tête
+  `Authorization` en clair sur le même hôte).
+- Toute réponse distante est lue par `sanitize.ReadAtMost` (plafond de taille),
+  et toute pagination est bornée : un serveur ne peut pas faire tourner le CLI
+  sans fin ni lui faire tenir une réponse illimitée en mémoire.
+- Tout texte distant passe par `sanitize.Printable` avant le terminal, **y
+  compris dans les messages d'erreur**.
 - Toute entrée interpolée dans JQL est échappée (`quote`) ; les paramètres d'URL
   passent par `url.Values.Encode` — pas d'injection.
 - La réponse du LLM est **affichée**, jamais exécutée.

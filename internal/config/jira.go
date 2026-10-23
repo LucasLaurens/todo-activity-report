@@ -1,8 +1,6 @@
 package config
 
 import (
-	"net/http"
-
 	"github.com/LucasLaurens/todo-activity-report/internal/application/ports"
 	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/jira"
 )
@@ -24,5 +22,5 @@ func buildJiraTracker() (ports.Tracker, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
-	return jira.NewClient(config, &http.Client{Timeout: httpTimeout}), nil
+	return jira.NewClient(config, newHTTPClient()), nil
 }
