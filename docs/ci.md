@@ -70,11 +70,11 @@ git push origin v1.0.0
 Aucun secret à configurer : le `GITHUB_TOKEN` fourni au workflow suffit à
 créer la Release.
 
-Sans CI disponible (cas de la v1.3.0, Actions bloquées par la facturation), on
+Sans CI disponible (cas des v1.3.0 et v1.3.1, Actions bloquées par la facturation), on
 reproduit le job à la main, puis on publie avec `gh` :
 
 ```bash
-TAG=v1.3.0
+TAG=v1.3.1
 for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
   CGO_ENABLED=0 GOOS="${target%-*}" GOARCH="${target#*-}" \
     go build -trimpath -ldflags="-s -w -X main.version=$TAG" \
