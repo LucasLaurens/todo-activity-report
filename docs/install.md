@@ -33,7 +33,7 @@ Il ne réclame que deux choses :
 | `SHA256SUMS` | empreintes des 4 binaires |
 
 Chaque tag pousse ces fichiers dans une **Release GitHub** (voir [ci.md](ci.md#build--release-sur-tag)).
-Dernière release : **v1.3.0** — liste complète via
+Dernière release : **v1.3.1** — liste complète via
 `gh release list --repo LucasLaurens/todo-activity-report`.
 
 ### Télécharger et installer
@@ -43,7 +43,7 @@ Le plus simple est `gh`, qui réutilise la session existante — inutile de
 manipuler un token à la main :
 
 ```bash
-TAG=v1.3.0                    # tag visé
+TAG=v1.3.1                    # tag visé
 TARGET=darwin-arm64           # ou darwin-amd64, linux-amd64, linux-arm64
 
 # 1. binaire + empreintes, sous leur nom de publication
@@ -99,7 +99,7 @@ shasum: SHA256SUMS: no file was verified          # exit 1
 ### Savoir quelle version on a
 
 ```bash
-todo-activity-report --version     # → todo-activity-report v1.3.0
+todo-activity-report --version     # → todo-activity-report v1.3.1
 ```
 
 Le tag est injecté à la compilation par le job `release`
@@ -181,7 +181,7 @@ rm ~/bin/todo-activity-report ~/bin/.env
 
 ## Captures d'écran
 
-Téléchargement, vérification de l'empreinte et premier lancement de la v1.3.0 :
+Téléchargement, vérification de l'empreinte et premier lancement de la v1.3.1 :
 
 ![Premier lancement](images/install-premier-run.png)
 
