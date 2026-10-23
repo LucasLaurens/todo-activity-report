@@ -217,10 +217,11 @@ ligne d'ouverture de la synthèse reste neutre : elle parle de tous les statuts 
 la fois. Pas de couleur si la sortie est redirigée (pipe, fichier) ou si
 `NO_COLOR` est défini — utile pour l'export Notes et les tests.
 
-Capture à ajouter dans [`docs/images/`](images/README.md) (`sortie-couleurs.png`),
-puis décommenter :
+![Sortie colorée par statut](images/sortie-couleurs.png)
 
-<!-- ![Sortie colorée par statut](images/sortie-couleurs.png) -->
+Avec `--detail=brief`, seuls les chiffres et la synthèse IA restent :
+
+![Sortie en mode brief](images/sortie-brief.png)
 
 ## Périmètre : ce qui est « travaillé » un jour
 
