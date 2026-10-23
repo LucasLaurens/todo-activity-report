@@ -48,3 +48,18 @@ func TestPrintableKeepsNewlinesTabsAndAccents(t *testing.T) {
 		t.Fatalf("legit text altered: %q", cleaned)
 	}
 }
+
+func TestPrintableRemovesC1ControlsAndBidiOverrides(t *testing.T) {
+	t.Parallel()
+	// Arrange — U+009B is a one-rune CSI some terminals honour; U+202E flips
+	// the text that follows, enough to make "ACME-1 txt.exe" read otherwise.
+	hostile := "a\u009b2Jb\u202ec\u2066d\u200fe"
+
+	// Act
+	cleaned := sanitize.Printable(hostile)
+
+	// Assert
+	if cleaned != "a2Jbcde" {
+		t.Fatalf("unexpected sanitisation: %q", cleaned)
+	}
+}

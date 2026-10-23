@@ -40,7 +40,7 @@ dépendent que des ports. Build OK, `go vet` OK, suite de tests verte.
 - [x] Résolutions comptées **dans la période** (`Task.IsResolvedWithin`, `DateRange.Contains`) : « Résolus », le taux, « Par personne » et le MTTR ignorent un ticket résolu il y a trois mois et seulement touché aujourd'hui.
 - [x] MTTR robuste : exclut les résolutions antérieures à la création (anomalies).
 - [x] Audit perf : somme du temps en une passe, champs Jira calculés une fois.
-- [x] Audit sécurité : `https://` exigé par l'adapter Jira (`jira.ErrInsecureBaseURL`), troncature rune-safe (UTF-8), JQL/URL échappés (**antislash échappé avant le guillemet** — un terme finissant par `\` s'évadait de la chaîne JQL), timeouts HTTP, `.env` **world-writable ignoré** (avertissement sur stderr) car il porte les identifiants, tout texte venu du tracker ou du modèle passe par `sanitize.Printable` (séquences ANSI et caractères de contrôle retirés avant affichage terminal), CLI `claude` **isolé** (aucun outil, aucun MCP, aucun réglage projet, dossier de travail vide) contre l'injection de prompt via les tickets, toolchain Go patché (`go1.26.10`, `govulncheck` vide) et CI en droits minimaux avec actions épinglées par SHA.
+- [x] Audit sécurité : `https://` exigé par l'adapter Jira (`jira.ErrInsecureBaseURL`), troncature rune-safe (UTF-8), JQL/URL échappés (**antislash échappé avant le guillemet** — un terme finissant par `\` s'évadait de la chaîne JQL), timeouts HTTP, `.env` **world-writable ignoré** (avertissement sur stderr) car il porte les identifiants, tout texte venu du tracker ou du modèle passe par `sanitize.Printable` (séquences ANSI, contrôles C0/C1 et marques bidi retirés avant affichage terminal), **messages d'erreur compris** (corps d'erreur Jira/Anthropic, stderr du CLI `claude`), réponses HTTP plafonnées (16 Mo Jira, 1 Mo Anthropic), redirection `https→http` refusée (sinon `net/http` y renverrait le token Jira), pagination Jira bornée (jeton répété ou plus de 1000 pages → erreur), CLI `claude` **isolé** (aucun outil, aucun MCP, aucun réglage projet, dossier de travail vide) contre l'injection de prompt via les tickets, toolchain Go patché (`go1.26.10`, `govulncheck` vide) et CI en droits minimaux avec actions épinglées par SHA.
 - [x] Mapping des champs custom root cause / correction (texte + ADF). Un champ suivant le template Problème/Cause/Correction/Prévention : la Cause alimente le root cause, la Correction le fix ; variantes « vulgarisée » ignorées, template non rempli traité comme vide.
 - [x] Métriques déterministes : totaux, taux de résolution, temps total/moyen,
       MTTR, par assignee, par type, par priorité, top root causes.
@@ -88,12 +88,6 @@ Aucune dépendance Go tierce : stdlib uniquement.
   stdlib connues (`govulncheck -mode=binary`). La **v1.3.0** (go1.26.10) n'en a aucune.
 - [ ] CI GitHub Actions bloquée par la facturation du compte : la v1.3.0 a été compilée en
   local avec les commandes exactes du job `release` (voir [ci.md](ci.md#publier-une-version)).
-- [ ] Durcissements sécurité restants, faible gravité (serveurs de confiance requis) :
-  corps d'erreur Jira/Anthropic et stderr du CLI `claude` affichés sans `sanitize.Printable` ;
-  `sanitize.Printable` laisse passer les contrôles C1 (U+0080–U+009F) et les marques bidi ;
-  réponses HTTP lues sans plafond de taille ; une redirection `https→http` vers le même hôte
-  Jira renverrait l'en-tête `Authorization` (comportement de `net/http`) ; pagination sans
-  borne si le serveur renvoie sans fin un `nextPageToken`.
 - [ ] Pas de Homebrew tap / installeur : le binaire se télécharge à la main depuis la Release.
   Le dépôt étant privé, le téléchargement passe par `gh release download`, qui porte la
   session GitHub ; l'URL directe répond 404 sans authentification — voir [install.md](install.md).
