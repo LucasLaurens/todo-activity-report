@@ -15,7 +15,7 @@ func buildTimeBreakdown(tasks []domain.Task, total domain.TimeSpent) ([]domain.T
 	timed := make([]domain.TaskTime, 0, len(tasks))
 	untimed := 0
 	for _, task := range tasks {
-		if task.TimeSpent.Seconds() == 0 {
+		if task.TimeSpent.IsZero() {
 			untimed++
 			continue
 		}

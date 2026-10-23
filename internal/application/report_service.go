@@ -33,14 +33,14 @@ func NewReportService(provider ports.TaskProvider, resolver ports.UserResolver, 
 func (s ReportService) Generate(ctx context.Context, query domain.Query) (domain.Report, error) {
 	displayAssignees := query.Assignees
 
-	s.progress.Stage("stage_resolve")
+	s.progress.Stage(ports.StageResolve)
 	resolved, err := s.resolveAssignees(ctx, query.Assignees)
 	if err != nil {
 		return domain.Report{}, fmt.Errorf("resolve assignees: %w", err)
 	}
 	query.Assignees = resolved
 
-	s.progress.Stage("stage_fetch")
+	s.progress.Stage(ports.StageFetch)
 	tasks, err := s.provider.FetchTasks(ctx, query)
 	if err != nil {
 		return domain.Report{}, fmt.Errorf("fetch tasks: %w", err)
@@ -48,7 +48,7 @@ func (s ReportService) Generate(ctx context.Context, query domain.Query) (domain
 
 	sortByAttention(tasks)
 
-	s.progress.Stage("stage_metrics")
+	s.progress.Stage(ports.StageMetrics)
 	report := domain.Report{
 		Project:   query.Project,
 		Period:    query.Period,
@@ -58,7 +58,7 @@ func (s ReportService) Generate(ctx context.Context, query domain.Query) (domain
 		Narrative: domain.None[string](),
 	}
 
-	s.progress.Stage("stage_summary")
+	s.progress.Stage(ports.StageSummary)
 	narrative, err := s.summarizer.Summarize(ctx, report)
 	if err != nil {
 		return domain.Report{}, fmt.Errorf("summarize report: %w", err)
@@ -70,20 +70,6 @@ func (s ReportService) Generate(ctx context.Context, query domain.Query) (domain
 
 // resolveAssignees maps each friendly assignee term to the tracker identifier,
 // preserving order. An empty list (all users) resolves to an empty list.
-// sortByAttention puts what blocks first, then what is moving, what shipped,
-// what is not started and last what was abandoned. The ticket key breaks ties
-// so the report — and the prompt built from it — stays reproducible.
-// O(n log n) time, O(1) extra space.
-func sortByAttention(tasks []domain.Task) {
-	sort.Slice(tasks, func(i, j int) bool {
-		left, right := tasks[i].StatusKind().AttentionRank(), tasks[j].StatusKind().AttentionRank()
-		if left != right {
-			return left < right
-		}
-		return tasks[i].Key < tasks[j].Key
-	})
-}
-
 func (s ReportService) resolveAssignees(ctx context.Context, terms []string) ([]string, error) {
 	resolved := make([]string, 0, len(terms))
 	for _, term := range terms {
@@ -94,4 +80,31 @@ func (s ReportService) resolveAssignees(ctx context.Context, terms []string) ([]
 		resolved = append(resolved, accountID)
 	}
 	return resolved, nil
+}
+
+type rankedTask struct {
+	rank int
+	task domain.Task
+}
+
+// sortByAttention puts what blocks first, then what is moving, what shipped,
+// what is not started and last what was abandoned. The ticket key breaks ties
+// so the report — and the prompt built from it — stays reproducible. Each rank
+// is computed once up front: StatusKind scans the comments, too costly to
+// repeat on every comparison.
+// O(n log n) time, O(n) space.
+func sortByAttention(tasks []domain.Task) {
+	ranked := make([]rankedTask, len(tasks))
+	for i, task := range tasks {
+		ranked[i] = rankedTask{rank: task.StatusKind().AttentionRank(), task: task}
+	}
+	sort.Slice(ranked, func(i, j int) bool {
+		if ranked[i].rank != ranked[j].rank {
+			return ranked[i].rank < ranked[j].rank
+		}
+		return ranked[i].task.Key < ranked[j].task.Key
+	})
+	for i, entry := range ranked {
+		tasks[i] = entry.task
+	}
 }

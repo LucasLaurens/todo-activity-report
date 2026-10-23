@@ -7,6 +7,7 @@ import (
 )
 
 func TestAnthropicConfigDefaultsModelAndDisabledWithoutKey(t *testing.T) {
+	// Arrange
 	t.Setenv("ANTHROPIC_API_KEY", "")
 	t.Setenv("ANTHROPIC_MODEL", "")
 
@@ -23,6 +24,7 @@ func TestAnthropicConfigDefaultsModelAndDisabledWithoutKey(t *testing.T) {
 }
 
 func TestAnthropicConfigEnabledWithKeyAndCustomModel(t *testing.T) {
+	// Arrange
 	t.Setenv("ANTHROPIC_API_KEY", "secret")
 	t.Setenv("ANTHROPIC_MODEL", "claude-custom")
 
@@ -38,15 +40,28 @@ func TestAnthropicConfigEnabledWithKeyAndCustomModel(t *testing.T) {
 	}
 }
 
-func TestEnvDefaultFallsBack(t *testing.T) {
-	t.Setenv("SOME_UNSET_VAR", "")
+func TestEnvDefaultFallsBackWhenTheVariableIsEmpty(t *testing.T) {
+	// Arrange
+	t.Setenv("CONFIG_TEST_VAR", "")
 
-	// Act & Assert
-	if got := envDefault("SOME_UNSET_VAR", "fallback"); got != "fallback" {
+	// Act
+	got := envDefault("CONFIG_TEST_VAR", "fallback")
+
+	// Assert
+	if got != "fallback" {
 		t.Fatalf("expected fallback, got %q", got)
 	}
-	t.Setenv("SOME_UNSET_VAR", "real")
-	if got := envDefault("SOME_UNSET_VAR", "fallback"); got != "real" {
+}
+
+func TestEnvDefaultPrefersTheVariableWhenSet(t *testing.T) {
+	// Arrange
+	t.Setenv("CONFIG_TEST_VAR", "real")
+
+	// Act
+	got := envDefault("CONFIG_TEST_VAR", "fallback")
+
+	// Assert
+	if got != "real" {
 		t.Fatalf("expected real value, got %q", got)
 	}
 }
