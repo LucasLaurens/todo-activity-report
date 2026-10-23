@@ -70,6 +70,23 @@ git push origin v1.0.0
 Aucun secret à configurer : le `GITHUB_TOKEN` fourni au workflow suffit à
 créer la Release.
 
+Sans CI disponible (cas de la v1.3.0, Actions bloquées par la facturation), on
+reproduit le job à la main, puis on publie avec `gh` :
+
+```bash
+TAG=v1.3.0
+for target in darwin-arm64 darwin-amd64 linux-amd64 linux-arm64; do
+  CGO_ENABLED=0 GOOS="${target%-*}" GOARCH="${target#*-}" \
+    go build -trimpath -ldflags="-s -w -X main.version=$TAG" \
+      -o "dist/todo-activity-report-$target" ./cmd/todo-activity-report
+done
+(cd dist && shasum -a 256 todo-activity-report-* > SHA256SUMS)
+gh release create "$TAG" --target main --title "todo-activity-report $TAG" dist/*
+```
+
+`CGO_ENABLED=0` reproduit la cross-compilation de la CI : un build natif sur
+macOS activerait cgo.
+
 ## Sécurité du pipeline
 
 - **Droits minimaux** : le workflow est en `contents: read` ; seul le job
