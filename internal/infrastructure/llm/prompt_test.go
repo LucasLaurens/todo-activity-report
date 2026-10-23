@@ -137,3 +137,26 @@ func TestBuildPromptTruncatesLongTaskList(t *testing.T) {
 		t.Fatalf("expected truncation note, got:\n%s", prompt)
 	}
 }
+
+// A board-wide report counts everyone's time: telling the model it is the
+// assignee's time would make it narrate a false figure.
+func TestBuildPromptNamesTheTimeLikeTheReportDoes(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	period, _ := domain.ParseDateRange("2026-05-01", "2026-05-31")
+	boardWide := domain.Report{Project: "ACME", Period: period}
+	targeted := domain.Report{Project: "ACME", Period: period, Assignees: []string{"Ada"}}
+	translator := i18n.NewTranslator(i18n.French)
+
+	// Act
+	boardPrompt := buildPrompt(boardWide, translator)
+	targetedPrompt := buildPrompt(targeted, translator)
+
+	// Assert
+	if strings.Contains(boardPrompt, "as assignee") {
+		t.Errorf("a board-wide prompt must not claim assignee time:\n%s", boardPrompt)
+	}
+	if !strings.Contains(targetedPrompt, "Time logged as assignee") {
+		t.Errorf("a targeted prompt must name assignee time:\n%s", targetedPrompt)
+	}
+}

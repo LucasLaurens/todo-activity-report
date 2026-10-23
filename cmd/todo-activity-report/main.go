@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -136,7 +137,7 @@ func run(args []string, stdout io.Writer, stderr *os.File) error {
 	if err != nil {
 		return err
 	}
-	options, err := resolveRenderOptions(parsed)
+	options, err := resolveRenderOptions(parsed, os.Getenv(columnsEnv))
 	if err != nil {
 		return err
 	}
@@ -216,17 +217,12 @@ func selectSummarizer(parsed flags, cfg config.Config, stderr io.Writer) ports.S
 // newProgress returns a spinner when stderr is a terminal, otherwise a no-op.
 // The returned stop function is idempotent and clears the spinner line.
 func newProgress(stderr *os.File, translator i18n.Translator) (ports.ProgressReporter, func()) {
-	if !isTerminal(stderr) {
+	if !cli.IsTerminal(stderr) {
 		return cli.NoopProgress{}, func() {}
 	}
 	spinner := cli.NewSpinner(stderr, translator)
 	spinner.Start()
 	return spinner, spinner.Stop
-}
-
-func isTerminal(file *os.File) bool {
-	info, err := file.Stat()
-	return err == nil && (info.Mode()&os.ModeCharDevice) != 0
 }
 
 // parseFlags leaves the help to the FlagSet: it already prints helpText on
@@ -319,10 +315,17 @@ func resolveAssignees(parsed flags, configured string) ([]string, error) {
 	return []string{configured}, nil
 }
 
-func resolveRenderOptions(parsed flags) (cli.RenderOptions, error) {
+// columnsEnv is the terminal width the shell exports. It describes the
+// terminal, not the app, so it is read here rather than through config.
+const columnsEnv = "COLUMNS"
+
+// resolveRenderOptions builds the layout from the flags and the terminal width.
+// An unset or unreadable width is 0, which the renderer reads as its default.
+func resolveRenderOptions(parsed flags, terminalColumns string) (cli.RenderOptions, error) {
 	detail, err := cli.ParseDetailLevel(parsed.detail)
 	if err != nil {
 		return cli.RenderOptions{}, err
 	}
-	return cli.RenderOptions{TaskLimit: parsed.limit, Detail: detail}, nil
+	width, _ := strconv.Atoi(terminalColumns)
+	return cli.RenderOptions{TaskLimit: parsed.limit, Detail: detail, Width: width}, nil
 }

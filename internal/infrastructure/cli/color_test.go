@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -145,4 +146,23 @@ func stripANSI(line string) string {
 		line = strings.ReplaceAll(line, code, "")
 	}
 	return line
+}
+
+func TestIsTerminalFalseForPipe(t *testing.T) {
+	t.Parallel()
+	// Arrange
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	defer reader.Close()
+	defer writer.Close()
+
+	// Act
+	terminal := IsTerminal(reader)
+
+	// Assert
+	if terminal {
+		t.Fatal("a pipe is not a terminal")
+	}
 }

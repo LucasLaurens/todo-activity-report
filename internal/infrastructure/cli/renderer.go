@@ -99,7 +99,7 @@ func (r Renderer) Render(report domain.Report) error {
 
 func (r Renderer) renderHeader(report domain.Report) {
 	people := r.t.T("scope_all_users")
-	if len(report.Assignees) > 0 {
+	if report.HasAssigneeFilter() {
 		people = strings.Join(report.Assignees, ", ")
 	}
 	r.printf("\n%s\n%s : %s → %s   %s : %s\n",
@@ -124,7 +124,7 @@ func (r Renderer) renderOverview(report domain.Report) {
 // twice — the tickets assigned to them, then their own worklogs — so the figure
 // is their time *as assignee*, not every minute they logged that day.
 func (r Renderer) timeLoggedLabel(report domain.Report) string {
-	if len(report.Assignees) == 0 {
+	if !report.HasAssigneeFilter() {
 		return r.t.T("time_logged")
 	}
 	return r.t.T("time_logged_as_assignee")
@@ -133,7 +133,7 @@ func (r Renderer) timeLoggedLabel(report domain.Report) string {
 // renderTimeScopeNote spells out what the assignee filter leaves out, since a
 // missing worklog is invisible by definition.
 func (r Renderer) renderTimeScopeNote(report domain.Report) {
-	if len(report.Assignees) == 0 || report.Metrics.TotalTimeSpent.Seconds() == 0 {
+	if !report.HasAssigneeFilter() || report.Metrics.TotalTimeSpent.IsZero() {
 		return
 	}
 	r.renderIndented(r.t.T("time_scope_note"))

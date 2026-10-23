@@ -252,22 +252,6 @@ func TestNewProgressNoopWhenNotTerminal(t *testing.T) {
 	}
 }
 
-func TestIsTerminalFalseForPipe(t *testing.T) {
-	t.Parallel()
-	// Arrange
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("pipe: %v", err)
-	}
-	defer reader.Close()
-	defer writer.Close()
-
-	// Act & Assert
-	if isTerminal(reader) {
-		t.Fatal("a pipe is not a terminal")
-	}
-}
-
 func TestHelpTextDocumentsEveryFlag(t *testing.T) {
 	t.Parallel()
 	// Arrange

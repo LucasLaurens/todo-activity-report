@@ -93,9 +93,18 @@ func writeMetrics(b *strings.Builder, report domain.Report) {
 	fmt.Fprintf(b, "Project: %s\n", report.Project)
 	fmt.Fprintf(b, "Period: %s to %s\n", report.Period.FromString(), report.Period.ToString())
 	fmt.Fprintf(b, "Total tickets: %d (resolved %d)\n", metrics.TotalTasks, metrics.ResolvedTasks)
-	fmt.Fprintf(b, "Time logged as assignee: %s, average %s per ticket\n", metrics.TotalTimeSpent, metrics.AvgTimeSpent)
+	fmt.Fprintf(b, "%s: %s, average %s per ticket\n", timeLoggedLabel(report), metrics.TotalTimeSpent, metrics.AvgTimeSpent)
 	writeLabelCounts(b, "Status breakdown", metrics.ByStatus)
 	writeLabelCounts(b, "Top root causes", metrics.TopRootCauses)
+}
+
+// timeLoggedLabel matches the report's own label: only a report targeting
+// people counts their time as assignee.
+func timeLoggedLabel(report domain.Report) string {
+	if report.HasAssigneeFilter() {
+		return "Time logged as assignee"
+	}
+	return "Time logged"
 }
 
 func writeLabelCounts(b *strings.Builder, title string, counts []domain.LabelCount) {
