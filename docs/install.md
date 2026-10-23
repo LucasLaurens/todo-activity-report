@@ -33,8 +33,8 @@ Il ne réclame que deux choses :
 | `SHA256SUMS` | empreintes des 4 binaires |
 
 Chaque tag pousse ces fichiers dans une **Release GitHub** (voir [ci.md](ci.md#build--release-sur-tag)).
-Aucune release n'est publiée à ce jour : jusqu'au premier `git push --tags`, la
-seule installation possible est **depuis les sources**, plus bas.
+Dernière release : **v1.2.0** — liste complète via
+`gh release list --repo LucasLaurens/todo-activity-report`.
 
 ### Télécharger et installer
 
@@ -43,7 +43,7 @@ Le plus simple est `gh`, qui réutilise la session existante — inutile de
 manipuler un token à la main :
 
 ```bash
-TAG=v1.0.0                    # tag visé
+TAG=v1.2.0                    # tag visé
 TARGET=darwin-arm64           # ou darwin-amd64, linux-amd64, linux-arm64
 
 # 1. binaire + empreintes, sous leur nom de publication
@@ -54,7 +54,8 @@ gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
 shasum -a 256 -c SHA256SUMS --ignore-missing   # macOS
 sha256sum -c SHA256SUMS --ignore-missing       # Linux
 
-# 3. installer
+# 3. installer (~/bin doit être dans le PATH)
+mkdir -p ~/bin
 install -m 755 "todo-activity-report-$TARGET" ~/bin/todo-activity-report
 
 # 4. identifiants, à côté du binaire (auto-chargés, aucun export nécessaire)
@@ -98,7 +99,7 @@ shasum: SHA256SUMS: no file was verified          # exit 1
 ### Savoir quelle version on a
 
 ```bash
-todo-activity-report --version     # → todo-activity-report v1.0.0
+todo-activity-report --version     # → todo-activity-report v1.2.0
 ```
 
 Le tag est injecté à la compilation par le job `release`
@@ -180,13 +181,11 @@ rm ~/bin/todo-activity-report ~/bin/.env
 
 ## Captures d'écran
 
-Emplacements prévus, à remplir en déposant les fichiers dans `docs/images/`
-puis en décommentant la ligne correspondante :
+Téléchargement, vérification de l'empreinte et premier lancement de la v1.2.0 :
 
-| Fichier attendu | Contenu |
-|-----------------|---------|
-| `docs/images/install-release.png` | page Release GitHub avec les assets |
-| `docs/images/install-premier-run.png` | premier lancement depuis `~/bin` |
+![Premier lancement](images/install-premier-run.png)
+
+Reste à fournir : `docs/images/install-release.png` (page Release GitHub avec
+les assets), puis décommenter :
 
 <!-- ![Assets de la Release GitHub](images/install-release.png) -->
-<!-- ![Premier lancement](images/install-premier-run.png) -->
