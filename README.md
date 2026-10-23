@@ -30,7 +30,7 @@ Prérequis : un accès au dépôt (il est **privé**, demander l'accès à son
 propriétaire) et la CLI [`gh`](https://cli.github.com) connectée (`gh auth login`).
 
 ```bash
-TAG=v1.3.0
+TAG=v1.3.1
 TARGET=darwin-arm64     # darwin-amd64 (Mac Intel), linux-amd64, linux-arm64
 
 gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
