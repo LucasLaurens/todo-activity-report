@@ -11,7 +11,6 @@ import (
 
 	"github.com/LucasLaurens/todo-activity-report/internal/domain"
 	"github.com/LucasLaurens/todo-activity-report/internal/i18n"
-	"github.com/LucasLaurens/todo-activity-report/internal/infrastructure/sanitize"
 )
 
 const (
@@ -64,21 +63,32 @@ type contentBlock struct {
 }
 
 func (s ClaudeSummarizer) Summarize(ctx context.Context, report domain.Report) (domain.Optional[string], error) {
-	payload := messagesRequest{
+	raw, err := s.postMessage(ctx, buildPrompt(report, s.translator))
+	if err != nil {
+		return domain.None[string](), fmt.Errorf("anthropic: %w", err)
+	}
+	answer, err := decodeAnswer(raw)
+	if err != nil {
+		return domain.None[string](), fmt.Errorf("anthropic: %w", err)
+	}
+	return toNarrative(answer), nil
+}
+
+// postMessage sends the prompt to the Messages API and returns the raw body of
+// a successful answer.
+func (s ClaudeSummarizer) postMessage(ctx context.Context, prompt string) ([]byte, error) {
+	body, err := json.Marshal(messagesRequest{
 		Model:     s.model,
 		MaxTokens: defaultMaxTokens,
-		Messages: []messagePayload{
-			{Role: "user", Content: buildPrompt(report, s.translator)},
-		},
-	}
-	body, err := json.Marshal(payload)
+		Messages:  []messagePayload{{Role: "user", Content: prompt}},
+	})
 	if err != nil {
-		return domain.None[string](), err
+		return nil, fmt.Errorf("encode request: %w", err)
 	}
 
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint, bytes.NewReader(body))
 	if err != nil {
-		return domain.None[string](), err
+		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("x-api-key", s.apiKey)
@@ -86,36 +96,31 @@ func (s ClaudeSummarizer) Summarize(ctx context.Context, report domain.Report) (
 
 	response, err := s.httpClient.Do(request)
 	if err != nil {
-		return domain.None[string](), err
+		return nil, err
 	}
 	defer response.Body.Close()
 
 	raw, err := io.ReadAll(response.Body)
 	if err != nil {
-		return domain.None[string](), err
+		return nil, fmt.Errorf("read response: %w", err)
 	}
 	if response.StatusCode != http.StatusOK {
-		return domain.None[string](), fmt.Errorf("anthropic returned %d: %s", response.StatusCode, strings.TrimSpace(string(raw)))
+		return nil, fmt.Errorf("status %d: %s", response.StatusCode, strings.TrimSpace(string(raw)))
 	}
-
-	var decoded messagesResponse
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return domain.None[string](), err
-	}
-
-	narrative := joinTextBlocks(decoded.Content)
-	if narrative == "" {
-		return domain.None[string](), nil
-	}
-	return domain.Some(narrative), nil
+	return raw, nil
 }
 
-func joinTextBlocks(blocks []contentBlock) string {
-	var builder strings.Builder
-	for _, block := range blocks {
+// decodeAnswer joins the text blocks of a Messages API response.
+func decodeAnswer(raw []byte) (string, error) {
+	var decoded messagesResponse
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return "", fmt.Errorf("decode response: %w", err)
+	}
+	var answer strings.Builder
+	for _, block := range decoded.Content {
 		if block.Type == "text" {
-			builder.WriteString(block.Text)
+			answer.WriteString(block.Text)
 		}
 	}
-	return strings.TrimSpace(sanitize.Printable(builder.String()))
+	return answer.String(), nil
 }

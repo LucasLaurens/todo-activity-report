@@ -29,6 +29,8 @@ Un `.env` **accessible en écriture à tout le monde** (bit `o+w`) est **ignoré
 avec un avertissement sur stderr : il porte les identifiants du tracker et son
 URL de base, donc quiconque peut le réécrire pourrait les faire partir ailleurs.
 `chmod o-w .env` (ou `chmod 600 .env`) le rend de nouveau lisible par le CLI.
+Une lecture interrompue (ligne de plus de 64 Kio) est elle aussi signalée sur
+stderr : les clés situées après ce point ne sont pas chargées.
 
 ## Le pont env → application (façon Laravel)
 
@@ -56,7 +58,7 @@ typée. Changer un nom de variable = un seul fichier à toucher.
 | `TRACKER_PROJECT` | oui\* | — | clé du projet / board par défaut (\* sauf si `--project` est passé) |
 | `TRACKER_USER` | non | le compte du tracker | personne ciblée quand `--user` est absent ; vide et sans compte lisible = tout le board |
 | `JIRA_BASE_URL` | oui\*\* | — | URL instance Jira Cloud (`https://org.atlassian.net`) |
-| `JIRA_EMAIL` | oui\*\* | — | email du compte / bot ; sert aussi de `TRACKER_USER` par défaut |
+| `JIRA_EMAIL` | oui\*\* | — | email du compte / bot ; sert aussi de `TRACKER_USER` par défaut (l'entrée Jira du registre le déclare comme compte du tracker) |
 | `JIRA_API_TOKEN` | oui\*\* | — | token API Atlassian |
 | `JIRA_ROOT_CAUSE_FIELD` | non | — | id champ custom root cause (`customfield_XXXXX`) |
 | `JIRA_CORRECTION_FIELD` | non | — | id champ custom correction |
@@ -70,8 +72,10 @@ Où générer chaque token, et ceux utilisés autour du dépôt sans passer par
 `.env` : [README, section Tokens et secrets](../README.md#tokens-et-secrets).
 | `NO_COLOR` | non | — | si défini (non vide), désactive la colorimétrie ANSI des statuts |
 
-`NO_COLOR` et `COLUMNS` décrivent le terminal, pas l'app : ils sont lus directement
-par la couche de rendu (`internal/infrastructure/cli`), sans passer par `internal/config`.
+`NO_COLOR` et `COLUMNS` décrivent le terminal, pas l'app : ils ne passent pas par
+`internal/config`. `NO_COLOR` est lu directement par la couche de rendu
+(`internal/infrastructure/cli`) ; `COLUMNS` est lu par `cmd` et transmis au rendu
+via `cli.RenderOptions.Width` (0 ou moins de 40 → largeur par défaut de 100).
 
 ### Langue (i18n)
 

@@ -71,6 +71,20 @@ func TestAttentionRankReadsBlockersFirst(t *testing.T) {
 	}
 }
 
+func TestAttentionRankSinksAnUnlistedKindToTheBottom(t *testing.T) {
+	t.Parallel()
+	// Arrange — a kind added later without a place in the attention order.
+	unlisted := domain.StatusKind(99)
+
+	// Act
+	rank := unlisted.AttentionRank()
+
+	// Assert
+	if rank <= domain.StatusAbandoned.AttentionRank() {
+		t.Fatalf("expected an unlisted kind after abandoned work, got rank %d", rank)
+	}
+}
+
 func TestStatusKindTreatsABlockingCommentAsBlocked(t *testing.T) {
 	t.Parallel()
 	// Arrange — the status says the work is moving, the thread says otherwise.

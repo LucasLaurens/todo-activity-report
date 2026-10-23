@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,10 +17,10 @@ const dotEnvFile = ".env"
 // applies BOTH: the first file to set a key wins, so the executable-dir file
 // fills any keys the working-dir file lacks. This keeps the binary working from
 // any directory even when an unrelated .env sits in the working directory.
-// A missing file is not an error.
-func loadDotEnv() {
+// A missing file is not an error; a file skipped or cut short is warned about.
+func loadDotEnv(warnings io.Writer) {
 	for _, path := range dotEnvCandidates() {
-		applyDotEnv(path)
+		applyDotEnv(path, warnings)
 	}
 }
 
@@ -34,10 +35,12 @@ func dotEnvCandidates() []string {
 // worldWritablePermission is the bit that makes a .env everyone's to rewrite.
 const worldWritablePermission = 0o002
 
-// applyDotEnv parses one file and reports whether it existed and was read.
-// A world-writable .env is skipped: it holds the Jira token and the base URL,
-// so anyone able to rewrite it could redirect the credentials to another host.
-func applyDotEnv(path string) bool {
+// applyDotEnv parses one file and reports whether it existed and was read in
+// full. A world-writable .env is skipped: it holds the Jira token and the base
+// URL, so anyone able to rewrite it could redirect the credentials to another
+// host. A read cut short (e.g. a line over the scanner limit) is warned about,
+// since the keys after it silently go missing.
+func applyDotEnv(path string, warnings io.Writer) bool {
 	file, err := os.Open(path)
 	if err != nil {
 		return false
@@ -49,7 +52,7 @@ func applyDotEnv(path string) bool {
 		return false
 	}
 	if info.Mode().Perm()&worldWritablePermission != 0 {
-		fmt.Fprintf(os.Stderr, "warning: ignoring world-writable %s (chmod o-w it to load it)\n", path)
+		fmt.Fprintf(warnings, "warning: ignoring world-writable %s (chmod o-w it to load it)\n", path)
 		return false
 	}
 
@@ -63,7 +66,10 @@ func applyDotEnv(path string) bool {
 			_ = os.Setenv(key, value)
 		}
 	}
-	_ = scanner.Err()
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(warnings, "warning: stopped reading %s: %v (the keys after this point are not loaded)\n", path, err)
+		return false
+	}
 	return true
 }
 

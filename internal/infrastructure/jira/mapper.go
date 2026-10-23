@@ -2,6 +2,7 @@ package jira
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -27,6 +28,11 @@ func toTask(dto issueDTO, mapping fieldMapping) (domain.Task, error) {
 		return domain.Task{}, err
 	}
 
+	createdAt, err := parseTime(fields.Created)
+	if err != nil {
+		return domain.Task{}, fmt.Errorf("created: %w", err)
+	}
+
 	custom := make(map[string]any)
 	if err := json.Unmarshal(dto.Fields, &custom); err != nil {
 		return domain.Task{}, err
@@ -44,13 +50,13 @@ func toTask(dto issueDTO, mapping fieldMapping) (domain.Task, error) {
 	return domain.Task{
 		Key:        sanitize.Printable(dto.Key),
 		Summary:    sanitize.Printable(fields.Summary),
-		Assignee:   sanitize.Printable(assigneeName(fields.Assignee)),
+		Assignee:   sanitize.Printable(displayName(fields.Assignee)),
 		Type:       sanitize.Printable(fields.IssueType.Name),
 		Priority:   sanitize.Printable(priorityName(fields.Priority)),
 		Status:     sanitize.Printable(fields.Status.Name),
 		RootCause:  rootCause,
 		Correction: correction,
-		CreatedAt:  parseTime(fields.Created),
+		CreatedAt:  createdAt,
 		ResolvedAt: parseOptionalTime(fields.ResolutionDate),
 		TimeSpent:  domain.NewTimeSpent(effectiveTimeSpent(fields)),
 		Comments:   toComments(fields.Comment),
@@ -58,8 +64,9 @@ func toTask(dto issueDTO, mapping fieldMapping) (domain.Task, error) {
 }
 
 // maxCommentsPerTask caps how many comments travel with a task. Only the most
-// recent ones carry the current state of the ticket; keeping the tail bounds
-// prompt size (and cost) regardless of how chatty a ticket is.
+// recent ones carry the current state of the ticket — a blocker flagged this
+// week, not last year — which is what the blocking-comment detection reads.
+// The prompt applies its own, tighter budget.
 const maxCommentsPerTask = 5
 
 // toComments keeps the most recent comments (the field arrives oldest-first),
@@ -78,12 +85,12 @@ func toComments(field *commentField) []domain.Comment {
 		if body == "" {
 			continue
 		}
-		comments = append(comments, domain.Comment{Author: sanitize.Printable(assigneeName(entry.Author)), Body: body})
+		comments = append(comments, domain.Comment{Author: sanitize.Printable(displayName(entry.Author)), Body: body})
 	}
 	return comments
 }
 
-func assigneeName(value *assignee) string {
+func displayName(value *jiraUser) string {
 	if value == nil || value.DisplayName == "" {
 		return unassignedLabel
 	}
@@ -107,19 +114,21 @@ func effectiveTimeSpent(fields issueFields) int {
 	return 0
 }
 
-func parseTime(value string) time.Time {
+func parseTime(value string) (time.Time, error) {
 	parsed, err := time.Parse(jiraTimeLayout, value)
 	if err != nil {
-		return time.Time{}
+		return time.Time{}, fmt.Errorf("parse Jira time %q: %w", value, err)
 	}
-	return parsed
+	return parsed, nil
 }
 
+// parseOptionalTime maps an absent or unreadable resolution date to None: an
+// issue without a usable one is reported as unresolved rather than dropped.
 func parseOptionalTime(value *string) domain.Optional[time.Time] {
-	if value == nil || *value == "" {
+	if value == nil {
 		return domain.None[time.Time]()
 	}
-	parsed, err := time.Parse(jiraTimeLayout, *value)
+	parsed, err := parseTime(*value)
 	if err != nil {
 		return domain.None[time.Time]()
 	}
@@ -158,10 +167,17 @@ func flattenValue(raw any) string {
 var adfBlockTypes = map[string]bool{
 	"paragraph":  true,
 	"heading":    true,
-	"listItem":   true,
+	adfListItem:  true,
 	"blockquote": true,
 	"codeBlock":  true,
 }
+
+// ADF node types the flattening treats specially.
+const (
+	adfText      = "text"
+	adfHardBreak = "hardBreak"
+	adfListItem  = "listItem"
+)
 
 // extractADFText walks an Atlassian Document Format tree into plain text,
 // preserving line breaks (hard breaks and block boundaries) while concatenating
@@ -173,20 +189,21 @@ func extractADFText(node map[string]any) string {
 }
 
 func writeADFText(b *strings.Builder, node map[string]any) {
-	switch nodeType(node) {
-	case "text":
+	kind := nodeType(node)
+	switch kind {
+	case adfText:
 		if text, ok := node["text"].(string); ok {
 			b.WriteString(text)
 		}
 		return
-	case "hardBreak":
+	case adfHardBreak:
 		b.WriteByte('\n')
 		return
 	}
-	if adfBlockTypes[nodeType(node)] {
+	if adfBlockTypes[kind] {
 		ensureNewline(b)
 	}
-	if nodeType(node) == "listItem" {
+	if kind == adfListItem {
 		b.WriteString(listItemMarker)
 	}
 	content, ok := node["content"].([]any)

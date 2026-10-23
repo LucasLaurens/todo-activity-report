@@ -37,21 +37,16 @@ func ParseLocale(value string) Locale {
 // Translator resolves message keys for one locale, falling back to the default
 // locale, then to the key itself.
 type Translator struct {
-	locale   Locale
 	messages map[string]string
 	fallback map[string]string
 }
 
+// NewTranslator ignores catalog errors: the catalogs are embedded and a test
+// proves they parse, so a failure here cannot reach a released binary.
 func NewTranslator(locale Locale) Translator {
-	return Translator{
-		locale:   locale,
-		messages: load(locale),
-		fallback: load(DefaultLocale),
-	}
-}
-
-func (t Translator) Locale() Locale {
-	return t.locale
+	messages, _ := loadCatalog(locale)
+	fallback, _ := loadCatalog(DefaultLocale)
+	return Translator{messages: messages, fallback: fallback}
 }
 
 // T returns the message for key, formatted with args when provided.
@@ -69,12 +64,16 @@ func (t Translator) T(key string, args ...any) string {
 	return message
 }
 
-func load(locale Locale) map[string]string {
+// loadCatalog reads one embedded catalog. It always returns a usable map, empty
+// on error, so a translator degrades to printing keys rather than failing.
+func loadCatalog(locale Locale) (map[string]string, error) {
+	messages := make(map[string]string)
 	data, err := localesFS.ReadFile("locales/" + string(locale) + ".json")
 	if err != nil {
-		return map[string]string{}
+		return messages, err
 	}
-	messages := make(map[string]string)
-	_ = json.Unmarshal(data, &messages)
-	return messages
+	if err := json.Unmarshal(data, &messages); err != nil {
+		return map[string]string{}, err
+	}
+	return messages, nil
 }
