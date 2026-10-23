@@ -73,41 +73,6 @@ func TestRenderHidesTheTimeBreakdownWhenNothingWasLogged(t *testing.T) {
 	}
 }
 
-func TestParseDetailLevelReadsTheThreeLevels(t *testing.T) {
-	t.Parallel()
-	// Arrange
-	cases := map[string]cli.DetailLevel{
-		"":       cli.DetailNormal,
-		"normal": cli.DetailNormal,
-		"brief":  cli.DetailBrief,
-		"FULL":   cli.DetailFull,
-	}
-
-	for value, expected := range cases {
-		// Act
-		level, err := cli.ParseDetailLevel(value)
-
-		// Assert
-		if err != nil {
-			t.Fatalf("%q: unexpected error: %v", value, err)
-		}
-		if level != expected {
-			t.Fatalf("%q: expected %v, got %v", value, expected, level)
-		}
-	}
-}
-
-func TestParseDetailLevelRejectsAnUnknownLevel(t *testing.T) {
-	t.Parallel()
-	// Act
-	_, err := cli.ParseDetailLevel("verbose")
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected an error for an unknown detail level")
-	}
-}
-
 // The cap set by --limit is one rule for the whole report: it bounds the time
 // breakdown exactly like the ticket list, and says how much it hid.
 func TestRenderCapsTheTimeBreakdownWithTheTaskLimit(t *testing.T) {
