@@ -81,8 +81,15 @@ ils sont convertis en `Optional` dès le mapper Jira. Dépendances jamais nil :
 - Toute entrée interpolée dans JQL est échappée (`quote`) ; les paramètres d'URL
   passent par `url.Values.Encode` — pas d'injection.
 - La réponse du LLM est **affichée**, jamais exécutée.
-- Le résumé IA envoie les titres/root causes des tâches à Anthropic : activé
-  uniquement si `ANTHROPIC_API_KEY` est défini (voir [configuration.md](configuration.md)).
+- Le contenu des tickets est une **entrée non fiable** pour le modèle : le CLI
+  `claude` tourne sans outil, sans MCP, sans réglage projet, dans un dossier
+  vide — un commentaire piégé ne peut rien déclencher sur le poste
+  (voir [configuration.md](configuration.md#isolation-du-cli-claude)).
+- Le résumé IA envoie titres, causes et commentaires à Anthropic dès que le CLI
+  `claude` ou `ANTHROPIC_API_KEY` est disponible ; `--no-ai` le coupe
+  (voir [configuration.md](configuration.md#confidentialité-du-résumé-ia)).
+- Toolchain Go **patché** : `toolchain` de `go.mod` = `GO_VERSION` de la CI
+  (un test les garde synchrones), `govulncheck ./...` doit rester vide.
 
 ## Commentaires
 

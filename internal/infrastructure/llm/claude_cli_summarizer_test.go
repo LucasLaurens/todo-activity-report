@@ -81,3 +81,41 @@ func TestClaudeCLISummarizerErrorsWhenBinaryFails(t *testing.T) {
 		t.Fatal("expected an error when the CLI exits non-zero")
 	}
 }
+
+func TestClaudeCLISummarizerDisablesEveryToolAndProjectSetting(t *testing.T) {
+	t.Parallel()
+	// Arrange — the stub echoes the arguments it received.
+	binary := writeStubBinary(t, "#!/bin/sh\ncat >/dev/null\necho \"$*\"\n")
+	summarizer := llm.NewClaudeCLISummarizer(binary, i18n.NewTranslator(i18n.French))
+
+	// Act
+	narrative, err := summarizer.Summarize(context.Background(), emptyReport(t))
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	args, _ := narrative.Get()
+	want := "-p --output-format text --tools  --strict-mcp-config --setting-sources user --no-session-persistence"
+	if args != want {
+		t.Fatalf("expected an isolated invocation\nwant %q\ngot  %q", want, args)
+	}
+}
+
+func TestClaudeCLISummarizerRunsInAnEmptyWorkingDirectory(t *testing.T) {
+	t.Parallel()
+	// Arrange — the stub counts the entries of its working directory.
+	binary := writeStubBinary(t, "#!/bin/sh\ncat >/dev/null\nls -A | wc -l | tr -d ' '\n")
+	summarizer := llm.NewClaudeCLISummarizer(binary, i18n.NewTranslator(i18n.French))
+
+	// Act
+	narrative, err := summarizer.Summarize(context.Background(), emptyReport(t))
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entries, _ := narrative.Get(); entries != "0" {
+		t.Fatalf("expected an empty working directory, found %s entries", entries)
+	}
+}

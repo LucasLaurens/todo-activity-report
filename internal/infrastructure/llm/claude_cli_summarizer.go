@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -22,7 +23,20 @@ const (
 	// two minutes were not always enough.
 	cliTimeout      = 4 * time.Minute
 	cliOutputFormat = "text"
+	cliWorkDirGlob  = "todo-activity-report-claude-*"
 )
+
+// cliIsolationArgs keep the model a plain text generator. Ticket summaries and
+// comments are written by anyone with access to the board, so a crafted one
+// must not be able to drive tools on this machine: no built-in tool, no MCP
+// server, the user's own settings only (a project's hooks would otherwise run
+// from the working directory), and no transcript of internal tickets on disk.
+var cliIsolationArgs = []string{
+	"--tools", "",
+	"--strict-mcp-config",
+	"--setting-sources", "user",
+	"--no-session-persistence",
+}
 
 // ClaudeCLISummarizer drives the local `claude` CLI in headless mode, reusing
 // the user's existing Claude Code login — no API key required. It is one
@@ -44,9 +58,19 @@ func (s ClaudeCLISummarizer) Summarize(ctx context.Context, report domain.Report
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
 
+	// An empty working directory: no CLAUDE.md, .claude/ settings or .env of
+	// wherever the report was launched from reaches the model.
+	workDir, err := os.MkdirTemp("", cliWorkDirGlob)
+	if err != nil {
+		return domain.None[string](), fmt.Errorf("claude cli work dir: %w", err)
+	}
+	defer os.RemoveAll(workDir)
+
 	// Prompt goes through stdin (not argv): no ARG_MAX limit and no shell
 	// interpolation. exec.Command runs the binary directly, never via a shell.
-	cmd := exec.CommandContext(ctx, s.binary, "-p", "--output-format", cliOutputFormat)
+	args := append([]string{"-p", "--output-format", cliOutputFormat}, cliIsolationArgs...)
+	cmd := exec.CommandContext(ctx, s.binary, args...)
+	cmd.Dir = workDir
 	cmd.Stdin = strings.NewReader(buildPrompt(report, s.translator))
 
 	var stdout, stderr bytes.Buffer
