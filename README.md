@@ -1,100 +1,119 @@
 # todo-activity-report
 
-CLI Go qui répond à « qu'est-ce que cette personne a fait ce jour-là, et combien
-de temps sur quoi ? ». Sans aucun flag : **la personne configurée**, au **dernier
-jour ouvré**. Il résume, pour un **jour** (ou une plage) et des **personnes**
-donnés, tout ce qui a été **travaillé** sur un board — chaque ticket avec du
-temps loggué **ou** un changement de statut ce jour-là, **quel que soit son
-état** (en cours, bloqué, release, terminé) ; `--touched` élargit à toute mise à
-jour (commentaire, édition de champ). Sortie **en français** (ou anglais), avec
-un **résumé IA** automatique via le CLI `claude` local (sans clé API).
+**Qu'est-ce que j'ai fait hier, et combien de temps sur quoi ?** Une commande,
+une réponse : le rapport d'activité d'une personne sur un board de tickets, lu
+directement depuis le tracker (Jira fourni).
 
-Le tracker est un **adapter interchangeable** : Jira est fourni, brancher un
-autre outil ne touche ni le domaine ni le use case — voir
-[docs/trackers.md](docs/trackers.md).
+![Rapport d'activité dans le terminal](docs/images/sortie-couleurs.png)
 
-Architecture hexagonale, stdlib uniquement, zéro dépendance tierce.
+<sub>Board et tickets fictifs. Sortie réelle du CLI.</sub>
 
-## Démarrage rapide
+- **Zéro saisie** : sans aucun flag, la personne configurée au dernier jour ouvré
+  (le lundi remonte au vendredi).
+- **Tout ce qui a été travaillé**, pas seulement les tickets résolus : temps
+  loggué **ou** changement de statut ce jour-là (`--touched` élargit à tout
+  commentaire ou édition).
+- **Répartition du temps** par ticket, avancement par statut, cause racine et
+  correctif, délai de résolution.
+- **Lecture en un coup d'œil** : rouge = bloqué, bleu = en cours, vert = livré,
+  les bloquants d'abord.
+- **Synthèse IA** prête à lire au daily, via le CLI `claude` local (aucune clé)
+  ou l'API Anthropic. Facultative : `--no-ai`.
+- **Un seul binaire** : Go pur, aucune dépendance, macOS et Linux. Français par
+  défaut, anglais avec `APP_LOCALE=en`.
 
-Depuis les sources :
+## Installation
+
+### Binaire (recommandé)
+
+Prérequis : un accès au dépôt (il est **privé**, demander l'accès à son
+propriétaire) et la CLI [`gh`](https://cli.github.com) connectée (`gh auth login`).
 
 ```bash
-cp .env.example .env          # tracker + identifiants — auto-chargé, aucun export
-go build -o todo-activity-report ./cmd/todo-activity-report
+TAG=v1.2.0
+TARGET=darwin-arm64     # darwin-amd64 (Mac Intel), linux-amd64, linux-arm64
 
-./todo-activity-report --date='08/06/2026' --user='john.doe@example.com'
+gh release download "$TAG" --repo LucasLaurens/todo-activity-report \
+  --pattern "todo-activity-report-$TARGET" --pattern SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing      # Linux : sha256sum -c …
+mkdir -p ~/bin
+install -m 755 "todo-activity-report-$TARGET" ~/bin/todo-activity-report
 ```
 
-Ou **sans cloner le dépôt** : le binaire des Releases est autonome (stdlib,
-statiquement lié, locales embarquées), donc binaire + `.env` à côté suffisent —
-voir [docs/install.md](docs/install.md).
+![Installation et premier lancement](docs/images/install-premier-run.png)
 
-## Exemples
+`~/bin` doit être dans le `PATH`. Sur macOS, si Gatekeeper bloque le premier
+lancement : `xattr -d com.apple.quarantine ~/bin/todo-activity-report`.
+Détails, mise à jour et désinstallation : [docs/install.md](docs/install.md).
+
+### Depuis les sources
+
+Go 1.22 ou plus :
 
 ```bash
-# Mes tickets aujourd'hui
-./todo-activity-report --date='08/06/2026' --user='john.doe@example.com'
+git clone https://github.com/LucasLaurens/todo-activity-report.git
+cd todo-activity-report
+go build -o todo-activity-report ./cmd/todo-activity-report
+```
+
+## Configuration
+
+Le CLI lit un fichier `.env`, cherché dans le répertoire courant **puis** à côté
+du binaire : aucun `export` nécessaire. Pour une installation binaire, le placer
+dans `~/bin/.env` :
+
+```bash
+cat > ~/bin/.env <<'ENV'
+TRACKER_PROJECT=ACME
+JIRA_BASE_URL=https://your-org.atlassian.net
+JIRA_EMAIL=john.doe@example.com
+JIRA_API_TOKEN=colle-ton-token-ici
+ENV
+chmod 600 ~/bin/.env
+```
+
+| Variable | Valeur |
+|----------|--------|
+| `TRACKER_PROJECT` | la clé du board, celle des tickets (`ACME-1042` → `ACME`) |
+| `JIRA_BASE_URL` | l'URL du site Atlassian, en **HTTPS** |
+| `JIRA_EMAIL` | l'adresse du compte Atlassian |
+| `JIRA_API_TOKEN` | https://id.atlassian.com/manage-profile/security/api-tokens → *Create API token* |
+
+Depuis les sources, partir du modèle commenté : `cp .env.example .env`. Toutes
+les variables (personne par défaut, champs de cause racine, langue, modèle IA)
+sont décrites plus bas, dans [Tokens et secrets](#tokens-et-secrets).
+
+## Utilisation
+
+```bash
+# Ce que j'ai fait au dernier jour ouvré
+todo-activity-report
+
+# Hier, en brief oral : chiffres + synthèse IA
+todo-activity-report --date='hier' --detail=brief
+
+# Un jour précis, pour quelqu'un d'autre
+todo-activity-report --date='08/06/2026' --user='john.doe@example.com'
 
 # Tout le board sur un jour
-./todo-activity-report --date='08/06/2026'
+todo-activity-report --date='08/06/2026' --all
 
 # Une plage, plusieurs personnes, toutes les lignes
-./todo-activity-report --from='01/05/2026' --to='31/05/2026' \
+todo-activity-report --from='01/05/2026' --to='31/05/2026' \
   --user='John Doe' --user='Jane Smith' --limit=0
 
 # En anglais, sans résumé IA
-APP_LOCALE=en ./todo-activity-report --date='08/06/2026' --no-ai
-
-# Ce que la personne configurée a fait au dernier jour ouvré
-./todo-activity-report
-
-# Hier, en brief oral : chiffres + synthèse IA
-./todo-activity-report --date='hier' --detail=brief
-
-# Tout le board sur un jour
-./todo-activity-report --date='08/06/2026' --all
+APP_LOCALE=en todo-activity-report --date='08/06/2026' --no-ai
 ```
 
-## Aperçu de la sortie
+Le mode `--detail=brief` ne garde que les chiffres et la synthèse, pour le daily :
 
-```
-ACME · Rapport d'activité
-Période : 2026-06-08 → 2026-06-08   Personnes : john.doe@example.com
+![Rapport en mode brief](docs/images/sortie-brief.png)
 
-Synthèse
-  Tickets traités            14
-  Résolus                    0 (0%)
-  Temps loggé (en tant qu'assigné)  6h 55m
-  Moyenne / ticket                  29m
-  Délai moyen de résolution         n/a
-    Ne compte que le temps loggué sur les tickets assignés à cette sélection :
-    un worklog sur un ticket assigné à quelqu'un d'autre n'apparaît pas.
-
-Répartition du temps
-  ACME-8212   2h 00m   29%  Toggle champ obligatoire non actionnable
-  ACME-10424  2h 30m   36%  Catégories non ajoutées au parcours
-  9 tickets touchés sans temps loggé
-
-Avancement
-  Bloqué       11
-  Code Review  1
-  En cours     1
-  Pré-release  1
-
-Tickets (14 sur 14)
-
-  • ACME-8212  ·  Code Review  ·  2h 00m
-    Toggle champ obligatoire non actionnable lors du premier paramétrage
-    Cause: Pour un champ tout juste ajouté, l'application ne surveillait pas…
-
-  • ACME-10424  ·  Bloqué  ·  2h 30m
-    Catégories non ajoutées au parcours
-  …
-
-Synthèse IA
-  Journée concentrée sur les plans d'action et la GED. 11 tickets bloqués…
-```
+Le tracker est un **adapter interchangeable** : Jira est fourni, brancher un
+autre outil ne touche ni le domaine ni le use case — voir
+[docs/trackers.md](docs/trackers.md). Architecture hexagonale, stdlib
+uniquement, zéro dépendance tierce.
 
 ## Flags
 
